@@ -1,0 +1,123 @@
+name: Release On Main
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Compute next StudioHubs tag
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          latest_tag=$(git tag --list 'StudioHubs_v*' --sort=-v:refname | head -n1 || true)
+
+          if [[ -z "${latest_tag}" ]]; then
+            next_version="1.0.1"
+          else
+            raw_version="${latest_tag#StudioHubs_v}"
+            IFS='.' read -r major minor patch <<< "${raw_version}"
+            major=${major:-1}
+            minor=${minor:-0}
+            patch=${patch:-0}
+            next_version="${major}.${minor}.$((patch + 1))"
+          fi
+
+          tag_name="StudioHubs_v${next_version}"
+
+          echo "latest_tag=${latest_tag}" >> "$GITHUB_OUTPUT"
+          echo "next_version=${next_version}" >> "$GITHUB_OUTPUT"
+          echo "tag_name=${tag_name}" >> "$GITHUB_OUTPUT"
+
+      - name: Build publish output
+        run: dotnet publish -c Release
+
+      - name: Create release zip package
+        id: package
+        env:
+          TAG_NAME: ${{ steps.version.outputs.tag_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          zip_name="${TAG_NAME}.zip"
+          zip -j "$zip_name" \
+            bin/Release/net9.0/publish/Jellyfin.Plugin.StudioHubs.dll \
+            bin/Release/net9.0/publish/Jellyfin.Plugin.StudioHubs.deps.json \
+            bin/Release/net9.0/publish/manifest.json \
+            bin/Release/net9.0/publish/meta.json
+
+          echo "zip_name=${zip_name}" >> "$GITHUB_OUTPUT"
+
+      - name: Create and push tag
+        env:
+          TAG_NAME: ${{ steps.version.outputs.tag_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
+            echo "Tag already exists: $TAG_NAME"
+          else
+            git tag "$TAG_NAME"
+            git push origin "$TAG_NAME"
+          fi
+
+      - name: Resolve release notes from merged PR
+        id: pr_notes
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const commitSha = context.sha;
+            let releaseBody = "";
+
+            try {
+              const { data: pullRequests } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+                owner,
+                repo,
+                commit_sha: commitSha,
+              });
+
+              const mergedPr = (pullRequests || []).find((pr) => Boolean(pr?.merged_at));
+              if (mergedPr?.body && mergedPr.body.trim().length > 0) {
+                releaseBody = mergedPr.body.trim();
+              }
+            } catch (error) {
+              core.warning(`Could not resolve PR body for release notes: ${error.message}`);
+            }
+
+            if (!releaseBody) {
+              releaseBody = `Automated release for ${context.ref} (${commitSha.slice(0, 7)}).`;
+            }
+
+            core.setOutput("release_body", releaseBody);
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag_name }}
+          name: ${{ steps.version.outputs.tag_name }}
+          body: ${{ steps.pr_notes.outputs.release_body }}
+          generate_release_notes: false
+          files: ${{ steps.package.outputs.zip_name }}

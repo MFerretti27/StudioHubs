@@ -1,0 +1,17 @@
+{
+  "guid": "8ab79914-1be0-4f4a-92aa-25ecf5ecad16",
+  "name": "Studio Hubs",
+  "description": "Standalone Studio Hubs plugin",
+  "overview": "Standalone studio hubs feature for Jellyfin home screen.",
+  "owner": "StudioHubs",
+  "category": "General",
+  "versions": [
+    {
+      "version": "1.0.0",
+      "targetAbi": "10.11.0.0",
+      "sourceUrl": "",
+      "checksum": "",
+      "timestamp": "2026-04-24T00:00:00Z"
+    }
+  ]
+}

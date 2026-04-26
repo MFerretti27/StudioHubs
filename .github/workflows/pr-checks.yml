@@ -1,0 +1,88 @@
+name: Check
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  syntax-check:
+    name: ✅ Syntax Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Check for syntax errors
+        run: python -m compileall .
+
+  ruff-check:
+    name: 🦊 Ruff Check & Format
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Ruff
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff
+
+      - name: Run Ruff lint (with auto-fix)
+        run: ruff check . --fix
+
+      - name: Format with Ruff (optional if replacing Black)
+        run: ruff format .
+
+  spell-check:
+    name: 🔤 Spell Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run codespell
+        uses: codespell-project/actions-codespell@v2
+        with:
+          check_filenames: true
+          skip: .git,venv,__pycache__,*.svg
+          ignore_words_list: "teh,func,ign,nd,"
+
+  type-check:
+    name: 🔎 Type Checking
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install mypy and dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install mypy
+          pip install -r requirements.txt
+
+      - name: Run mypy
+        run: mypy . --exclude tests
