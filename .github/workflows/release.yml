@@ -211,8 +211,23 @@ jobs:
         run: |
           set -euo pipefail
 
-          release_body="${PR_BODY}"
-          if [[ -z "${release_body// }" ]]; then
+          pr_body="${PR_BODY//$'\r'/}"
+          release_body="$(
+            printf '%s\n' "${pr_body}" |
+            awk '
+              BEGIN { in_notes = 0 }
+              /^##[[:space:]]+Release Notes[[:space:]]*$/ { in_notes = 1; next }
+              /^##[[:space:]]+/ { if (in_notes) exit }
+              { if (in_notes) print }
+            ' |
+            sed '/^[[:space:]]*<!--/,/-->[[:space:]]*$/d'
+          )"
+
+          # Trim leading/trailing blank lines.
+          release_body="$(printf '%s\n' "${release_body}" | sed '/./,$!d' | tac | sed '/./,$!d' | tac)"
+
+          # Treat template placeholder as empty.
+          if [[ "${release_body}" == "-" ]] || [[ -z "${release_body//[[:space:]]/}" ]]; then
             release_body="Release from merged PR #${PR_NUMBER}: ${PR_TITLE}"
           fi
 
