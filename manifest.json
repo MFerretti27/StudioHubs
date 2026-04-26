@@ -3,17 +3,17 @@
     "guid": "8ab79914-1be0-4f4a-92aa-25ecf5ecad16",
     "name": "Studio Hubs",
     "overview": "Standalone studio hubs feature for Jellyfin home screen.",
-    "owner": "StudioHubs",
+    "owner": "MFerretti27",
     "category": "General",
-    "description": "Adds a configurable studio hubs row with custom logos/videos and per-user visibility.",
+    "description": "Adds a configurable studio hubs row with admin-managed global studio visibility and order.",
     "versions": [
       {
-        "version": "1.0.0",
-        "changelog": "Fix startup injection compatibility and diagnostics",
+        "version": "1.0.1",
+        "changelog": "Initial public release with global studio management and improved Home rendering behavior",
         "targetAbi": "10.11.0.0",
-        "sourceUrl": "",
+        "sourceUrl": "https://github.com/MFerretti27/Jellyfin-StudioHubs-Plugin/releases/download/StudioHubs_v1.0.1/StudioHubs_v1.0.1.zip",
         "checksum": "",
-        "timestamp": "2026-04-24T00:00:00Z"
+        "timestamp": "2026-04-26T00:00:00Z"
       }
     ]
   }

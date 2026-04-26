@@ -1,9 +1,11 @@
 name: Release On Main
 
 on:
-  push:
+  pull_request:
     branches:
       - main
+    types:
+      - closed
 
 permissions:
   contents: write
@@ -11,6 +13,7 @@ permissions:
 
 jobs:
   release:
+    if: ${{ github.event.pull_request.merged == true }}
     runs-on: ubuntu-latest
 
     steps:
@@ -18,6 +21,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.RELEASE_BOT_TOKEN || github.token }}
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -33,7 +37,7 @@ jobs:
           latest_tag=$(git tag --list 'StudioHubs_v*' --sort=-v:refname | head -n1 || true)
 
           if [[ -z "${latest_tag}" ]]; then
-            next_version="1.0.1"
+            next_version="1.0.0"
           else
             raw_version="${latest_tag#StudioHubs_v}"
             IFS='.' read -r major minor patch <<< "${raw_version}"
@@ -48,6 +52,46 @@ jobs:
           echo "latest_tag=${latest_tag}" >> "$GITHUB_OUTPUT"
           echo "next_version=${next_version}" >> "$GITHUB_OUTPUT"
           echo "tag_name=${tag_name}" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare manifest and meta for release version
+        env:
+          NEXT_VERSION: ${{ steps.version.outputs.next_version }}
+          RELEASE_URL: https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag_name }}/${{ steps.version.outputs.tag_name }}.zip
+          RELEASE_TS: ${{ github.event.pull_request.merged_at }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          release_timestamp="${RELEASE_TS}"
+          if [[ -z "${release_timestamp// }" ]]; then
+            release_timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          fi
+
+          manifest_target_abi="$(jq -r '.[0].versions[0].targetAbi // "10.11.0.0"' manifest.json)"
+          manifest_changelog="$(jq -r '.[0].versions[0].changelog // "Automated release"' manifest.json)"
+
+          jq \
+            --arg version "$NEXT_VERSION" \
+            --arg sourceUrl "$RELEASE_URL" \
+            --arg checksum "" \
+            --arg timestamp "$release_timestamp" \
+            --arg targetAbi "$manifest_target_abi" \
+            --arg changelog "$manifest_changelog" \
+            '.[0].versions = ([{version: $version, changelog: $changelog, targetAbi: $targetAbi, sourceUrl: $sourceUrl, checksum: $checksum, timestamp: $timestamp}] + (.[0].versions // [] | map(select(.version != $version))))' \
+            manifest.json > manifest.json.tmp
+          mv manifest.json.tmp manifest.json
+
+          meta_target_abi="$(jq -r '.versions[0].targetAbi // "10.11.0.0"' meta.json)"
+
+          jq \
+            --arg version "$NEXT_VERSION" \
+            --arg sourceUrl "$RELEASE_URL" \
+            --arg checksum "" \
+            --arg timestamp "$release_timestamp" \
+            --arg targetAbi "$meta_target_abi" \
+            '.versions = ([{version: $version, targetAbi: $targetAbi, sourceUrl: $sourceUrl, checksum: $checksum, timestamp: $timestamp}] + (.versions // [] | map(select(.version != $version))))' \
+            meta.json > meta.json.tmp
+          mv meta.json.tmp meta.json
 
       - name: Build publish output
         run: dotnet publish -c Release
@@ -69,12 +113,86 @@ jobs:
 
           echo "zip_name=${zip_name}" >> "$GITHUB_OUTPUT"
 
-      - name: Create and push tag
+      - name: Compute release zip checksum
+        id: checksum
         env:
-          TAG_NAME: ${{ steps.version.outputs.tag_name }}
+          ZIP_NAME: ${{ steps.package.outputs.zip_name }}
         shell: bash
         run: |
           set -euo pipefail
+          zip_checksum="$(sha256sum "$ZIP_NAME" | awk '{print $1}')"
+          echo "zip_checksum=${zip_checksum}" >> "$GITHUB_OUTPUT"
+
+      - name: Finalize manifest and meta checksum
+        env:
+          NEXT_VERSION: ${{ steps.version.outputs.next_version }}
+          RELEASE_URL: https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag_name }}/${{ steps.version.outputs.tag_name }}.zip
+          RELEASE_TS: ${{ github.event.pull_request.merged_at }}
+          ZIP_CHECKSUM: ${{ steps.checksum.outputs.zip_checksum }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          release_timestamp="${RELEASE_TS}"
+          if [[ -z "${release_timestamp// }" ]]; then
+            release_timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          fi
+
+          manifest_target_abi="$(jq -r '.[0].versions[0].targetAbi // "10.11.0.0"' manifest.json)"
+          manifest_changelog="$(jq -r '.[0].versions[0].changelog // "Automated release"' manifest.json)"
+
+          jq \
+            --arg version "$NEXT_VERSION" \
+            --arg sourceUrl "$RELEASE_URL" \
+            --arg checksum "$ZIP_CHECKSUM" \
+            --arg timestamp "$release_timestamp" \
+            --arg targetAbi "$manifest_target_abi" \
+            --arg changelog "$manifest_changelog" \
+            '.[0].versions = ([{version: $version, changelog: $changelog, targetAbi: $targetAbi, sourceUrl: $sourceUrl, checksum: $checksum, timestamp: $timestamp}] + (.[0].versions // [] | map(select(.version != $version))))' \
+            manifest.json > manifest.json.tmp
+          mv manifest.json.tmp manifest.json
+
+          meta_target_abi="$(jq -r '.versions[0].targetAbi // "10.11.0.0"' meta.json)"
+
+          jq \
+            --arg version "$NEXT_VERSION" \
+            --arg sourceUrl "$RELEASE_URL" \
+            --arg checksum "$ZIP_CHECKSUM" \
+            --arg timestamp "$release_timestamp" \
+            --arg targetAbi "$meta_target_abi" \
+            '.versions = ([{version: $version, targetAbi: $targetAbi, sourceUrl: $sourceUrl, checksum: $checksum, timestamp: $timestamp}] + (.versions // [] | map(select(.version != $version))))' \
+            meta.json > meta.json.tmp
+          mv meta.json.tmp meta.json
+
+      - name: Commit manifest updates
+        env:
+          TAG_NAME: ${{ steps.version.outputs.tag_name }}
+          PUSH_TOKEN: ${{ secrets.RELEASE_BOT_TOKEN || github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+
+          git add manifest.json meta.json
+          if git diff --cached --quiet; then
+            echo "No manifest/meta changes to commit."
+          else
+            git commit -m "chore(release): update metadata for ${TAG_NAME} [skip ci]"
+            git push origin HEAD:main
+          fi
+
+      - name: Create and push tag
+        env:
+          TAG_NAME: ${{ steps.version.outputs.tag_name }}
+          PUSH_TOKEN: ${{ secrets.RELEASE_BOT_TOKEN || github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git remote set-url origin "https://x-access-token:${PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
 
           if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
             echo "Tag already exists: $TAG_NAME"
@@ -85,37 +203,29 @@ jobs:
 
       - name: Resolve release notes from merged PR
         id: pr_notes
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const { owner, repo } = context.repo;
-            const commitSha = context.sha;
-            let releaseBody = "";
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        shell: bash
+        run: |
+          set -euo pipefail
 
-            try {
-              const { data: pullRequests } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
-                owner,
-                repo,
-                commit_sha: commitSha,
-              });
+          release_body="${PR_BODY}"
+          if [[ -z "${release_body// }" ]]; then
+            release_body="Release from merged PR #${PR_NUMBER}: ${PR_TITLE}"
+          fi
 
-              const mergedPr = (pullRequests || []).find((pr) => Boolean(pr?.merged_at));
-              if (mergedPr?.body && mergedPr.body.trim().length > 0) {
-                releaseBody = mergedPr.body.trim();
-              }
-            } catch (error) {
-              core.warning(`Could not resolve PR body for release notes: ${error.message}`);
-            }
-
-            if (!releaseBody) {
-              releaseBody = `Automated release for ${context.ref} (${commitSha.slice(0, 7)}).`;
-            }
-
-            core.setOutput("release_body", releaseBody);
+          {
+            echo "release_body<<EOF"
+            echo "${release_body}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
+          token: ${{ secrets.RELEASE_BOT_TOKEN || github.token }}
           tag_name: ${{ steps.version.outputs.tag_name }}
           name: ${{ steps.version.outputs.tag_name }}
           body: ${{ steps.pr_notes.outputs.release_body }}
