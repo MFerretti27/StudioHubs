@@ -9,9 +9,9 @@
     {
       "version": "1.0.0",
       "targetAbi": "10.11.0.0",
-      "sourceUrl": "",
-      "checksum": "",
-      "timestamp": "2026-04-24T00:00:00Z"
+      "sourceUrl": "https://github.com/MFerretti27/Jellyfin-StudioHubs-Plugin/releases/download/StudioHubs_v1.0.0/StudioHubs_v1.0.0.zip",
+      "checksum": "4eef6741ebd04b9d5bbcfe4848819fdfb5fac5a050c0956b4602f865baa57477",
+      "timestamp": "2026-04-26T22:27:32Z"
     }
   ]
 }
