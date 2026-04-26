@@ -21,9 +21,6 @@ public class StudioHubsConfiguration : BasePluginConfiguration
     [JsonPropertyName("studioHubsRandomOrder")]
     public bool StudioHubsRandomOrder { get; set; } = false;
 
-    [JsonPropertyName("studioHubsMinRating")]
-    public double StudioHubsMinRating { get; set; } = 6.5;
-
     [JsonPropertyName("studioHubsPlaceAfter")]
     public string StudioHubsPlaceAfter { get; set; } = "continue watching";
 

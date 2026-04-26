@@ -116,7 +116,6 @@ function ensureCss() {
 
 function getCfgFromLocalStorage() {
   const enabled = localStorage.getItem("studiohubs.enabled");
-  const minRating = Number(localStorage.getItem("studiohubs.minRating") || 6.5);
   const hoverVideo = localStorage.getItem("studiohubs.hoverVideo");
   const randomOrder = localStorage.getItem("studiohubs.randomOrder");
   const placeAfter = String(localStorage.getItem("studiohubs.placeAfter") || "").trim();
@@ -126,7 +125,6 @@ function getCfgFromLocalStorage() {
     enablePlugin: true,
     enableStudioHubs: enabled == null ? true : enabled !== "false",
     enabled: enabled == null ? true : enabled !== "false",
-    minRating: Number.isFinite(minRating) ? minRating : 6.5,
     hoverVideo: hoverVideo == null ? true : hoverVideo !== "false",
     randomOrder: randomOrder === "true",
     placeAfter,
@@ -155,15 +153,10 @@ async function getCfg() {
       return fallbackValue;
     };
 
-    const minRatingRaw = Number(readCfg("studioHubsMinRating", "StudioHubsMinRating", fallback.minRating));
-
     CACHE.config = {
       enablePlugin: readCfg("enablePlugin", "EnablePlugin", true) !== false,
       enableStudioHubs: readCfg("enableStudioHubs", "EnableStudioHubs", true) !== false,
       enabled: readCfg("enableStudioHubs", "EnableStudioHubs", true) !== false,
-      minRating: Number.isFinite(minRatingRaw)
-        ? minRatingRaw
-        : fallback.minRating,
       hoverVideo: readCfg("studioHubsHoverVideo", "StudioHubsHoverVideo", fallback.hoverVideo) !== false,
       randomOrder: readCfg("studioHubsRandomOrder", "StudioHubsRandomOrder", fallback.randomOrder) === true,
       placeAfter: String(readCfg("studioHubsPlaceAfter", "StudioHubsPlaceAfter", fallback.placeAfter || "")).trim(),
@@ -682,7 +675,7 @@ function buildStudioHref(studioId, name) {
   return `#/search.html?query=${encodeURIComponent(name)}`;
 }
 
-async function fetchStudioItems(userId, studioId, minRating) {
+async function fetchStudioItems(userId, studioId) {
   const qs = new URLSearchParams({
     StartIndex: "0",
     Limit: "80",
@@ -691,7 +684,6 @@ async function fetchStudioItems(userId, studioId, minRating) {
     IncludeItemTypes: "Movie,Series",
     StudioIds: studioId,
     SortOrder: "Descending",
-    MinCommunityRating: String(minRating),
   });
 
   const payload = await fetchJson(`/Users/${encodeURIComponent(userId)}/Items?${qs.toString()}`);
@@ -838,7 +830,6 @@ function getVisitStableOrder(names, cfg) {
 function buildRenderSignature(entries, cfg) {
   return JSON.stringify({
     hoverVideo: cfg?.hoverVideo !== false,
-    minRating: Number(cfg?.minRating || 0),
     entries,
   });
 }
@@ -920,7 +911,7 @@ async function renderStudioHubs(force = false) {
 
       let backdropUrl = null;
       if (!logoUrl && userId && studioId) {
-        const items = await fetchStudioItems(userId, studioId, cfg.minRating).catch(() => []);
+        const items = await fetchStudioItems(userId, studioId).catch(() => []);
         backdropUrl = pickBackdrop(items.find((i) => Array.isArray(i?.BackdropImageTags) && i.BackdropImageTags.length));
       }
 

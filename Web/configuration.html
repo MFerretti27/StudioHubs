@@ -21,12 +21,6 @@
         </label>
 
         <div class="inputContainer">
-          <label class="inputLabel" for="studioHubsMinRating">Minimum rating</label>
-          <input id="studioHubsMinRating" type="number" min="0" max="10" step="0.1" class="emby-input" />
-          <div class="fieldDescription">Only items with a rating at or above this value are used when picking fallback studio backdrops.</div>
-        </div>
-
-        <div class="inputContainer">
           <label class="inputLabel" for="studioHubsPlaceAfter">Place after sections</label>
           <input id="studioHubsPlaceAfter" type="text" class="emby-input" placeholder="continue watching" />
           <div class="fieldDescription">Comma-separated section title fragments.</div>
@@ -222,13 +216,11 @@
       function applyConfig(cfg) {
         const hoverVideo = getCfgValue(cfg, "studioHubsHoverVideo", "StudioHubsHoverVideo", true);
         const randomOrder = getCfgValue(cfg, "studioHubsRandomOrder", "StudioHubsRandomOrder", false);
-        const minRating = getCfgValue(cfg, "studioHubsMinRating", "StudioHubsMinRating", 6.5);
         const placeAfter = getCfgValue(cfg, "studioHubsPlaceAfter", "StudioHubsPlaceAfter", "continue watching");
         const placeBefore = getCfgValue(cfg, "studioHubsPlaceBefore", "StudioHubsPlaceBefore", "recently added,latest,recent");
 
         input("studioHubsHoverVideo").checked = hoverVideo !== false;
         input("studioHubsRandomOrder").checked = randomOrder === true;
-        input("studioHubsMinRating").value = Number(minRating);
         input("studioHubsPlaceAfter").value = String(placeAfter || "continue watching");
         input("studioHubsPlaceBefore").value = String(placeBefore || "recently added,latest,recent");
       }
@@ -274,7 +266,6 @@
         const body = {
           studioHubsHoverVideo: input("studioHubsHoverVideo").checked,
           studioHubsRandomOrder: input("studioHubsRandomOrder").checked,
-          studioHubsMinRating: Number(input("studioHubsMinRating").value || 6.5),
           studioHubsPlaceAfter: String(input("studioHubsPlaceAfter").value || "").trim(),
           studioHubsPlaceBefore: String(input("studioHubsPlaceBefore").value || "").trim()
         };

@@ -41,7 +41,6 @@ Available settings:
 
 - Enable hover video
 - Randomize studio order on each Home visit
-- Minimum rating
 - Place after sections (comma-separated title keywords)
 - Place before sections (comma-separated title keywords)
 

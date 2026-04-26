@@ -15,7 +15,6 @@ public sealed class StudioHubsConfigUpdateDto
     public int? StudioHubsCardCount { get; set; }
     public bool? StudioHubsHoverVideo { get; set; }
     public bool? StudioHubsRandomOrder { get; set; }
-    public double? StudioHubsMinRating { get; set; }
     public string? StudioHubsPlaceAfter { get; set; }
     public string? StudioHubsPlaceBefore { get; set; }
 }
@@ -50,7 +49,6 @@ public sealed class ConfigController : ControllerBase
                 cfg.StudioHubsCardCount,
                 cfg.StudioHubsHoverVideo,
                 cfg.StudioHubsRandomOrder,
-                cfg.StudioHubsMinRating,
                 cfg.StudioHubsPlaceAfter,
                 cfg.StudioHubsPlaceBefore
             }
@@ -99,11 +97,6 @@ public sealed class ConfigController : ControllerBase
             cfg.StudioHubsRandomOrder = randomOrder;
         }
 
-        if (incoming?.StudioHubsMinRating is double minRating)
-        {
-            cfg.StudioHubsMinRating = Math.Clamp(minRating, 0.0, 10.0);
-        }
-
         if (incoming?.StudioHubsPlaceAfter is not null)
         {
             cfg.StudioHubsPlaceAfter = NormalizeKeywordCsv(incoming.StudioHubsPlaceAfter);
@@ -127,7 +120,6 @@ public sealed class ConfigController : ControllerBase
                 cfg.StudioHubsCardCount,
                 cfg.StudioHubsHoverVideo,
                 cfg.StudioHubsRandomOrder,
-                cfg.StudioHubsMinRating,
                 cfg.StudioHubsPlaceAfter,
                 cfg.StudioHubsPlaceBefore
             }
