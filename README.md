@@ -21,7 +21,7 @@ This plugin was extracted from the original MonWUI/JMSFusion Studio Hubs functio
 You can install this plugin directly from Jellyfin's plugin catalog by adding this repository manifest URL:
 
 ```text
-https://raw.githubusercontent.com/MFerretti27/Jellyfin-StudioHubs-Plugin/main/manifest.json
+https://raw.githubusercontent.com/MFerretti27/StudioHubs/main/manifest.json
 ```
 
 Steps:
