@@ -2,7 +2,7 @@
 
 Standalone Jellyfin plugin that adds a Studio Hubs row to the Home screen.
 
-This plugin was extracted from the original MonWUI/JMSFusion Studio Hubs functionality and focuses only on Studio Hubs behavior.
+This plugin was extracted from the Studio Hubs functionality in [G-grbz/Jellyfin-MonWUI-Plugin](https://github.com/G-grbz/Jellyfin-MonWUI-Plugin) and focuses only on Studio Hubs behavior.
 
 ## Compatibility
 
