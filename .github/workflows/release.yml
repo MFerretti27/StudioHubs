@@ -113,14 +113,14 @@ jobs:
 
           echo "zip_name=${zip_name}" >> "$GITHUB_OUTPUT"
 
-      - name: Compute release zip checksum
+      - name: Compute release zip checksum (md5)
         id: checksum
         env:
           ZIP_NAME: ${{ steps.package.outputs.zip_name }}
         shell: bash
         run: |
           set -euo pipefail
-          zip_checksum="$(sha256sum "$ZIP_NAME" | awk '{print $1}')"
+          zip_checksum="$(md5sum "$ZIP_NAME" | awk '{print $1}')"
           echo "zip_checksum=${zip_checksum}" >> "$GITHUB_OUTPUT"
 
       - name: Finalize manifest and meta checksum

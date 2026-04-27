@@ -12,7 +12,7 @@
         "changelog": "Automated release",
         "targetAbi": "10.11.0.0",
         "sourceUrl": "https://github.com/MFerretti27/StudioHubs/releases/download/StudioHubs_v1.0.1/StudioHubs_v1.0.1.zip",
-        "checksum": "afc8bc330224910282ac8e51056f73ff998cbfcd18fbb64b13fcf6b2bf0792a2",
+        "checksum": "a367bdbb0328e82d587528701e15730e",
         "timestamp": "2026-04-27T04:10:54Z"
       },
       {
@@ -20,7 +20,7 @@
         "changelog": "Automated release",
         "targetAbi": "10.11.0.0",
         "sourceUrl": "https://github.com/MFerretti27/StudioHubs/releases/download/StudioHubs_v1.0.0/StudioHubs_v1.0.0.zip",
-        "checksum": "48026b62416fa75228988d8d0e60216dcc6239f03238c7e3b069d8bbbc911251",
+        "checksum": "75feebf33f11760ad5ff39af300f0d9a",
         "timestamp": "2026-04-27T02:15:07Z"
       }
     ]
