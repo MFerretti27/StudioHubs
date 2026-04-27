@@ -9,6 +9,14 @@
     "imageUrl": "https://raw.githubusercontent.com/MFerretti27/StudioHubs/main/Resources/studiohubs/StudioHubs.png",
     "versions": [
       {
+        "version": "1.0.2",
+        "changelog": "Automated release",
+        "targetAbi": "10.11.0.0",
+        "sourceUrl": "https://github.com/MFerretti27/StudioHubs/releases/download/StudioHubs_v1.0.2/StudioHubs_v1.0.2.zip",
+        "checksum": "2605e4629a203a303e3f4a2330ce0474",
+        "timestamp": "2026-04-27T04:58:15Z"
+      },
+      {
         "version": "1.0.1",
         "changelog": "Automated release",
         "targetAbi": "10.11.0.0",
