@@ -6,6 +6,7 @@
     "owner": "MFerretti27",
     "category": "General",
     "description": "Adds a configurable studio hubs row with admin-managed global studio visibility and order.",
+    "imageUrl": "https://raw.githubusercontent.com/MFerretti27/StudioHubs/main/Resources/studiohubs/StudioHubs.png",
     "versions": [
       {
         "version": "1.0.1",
