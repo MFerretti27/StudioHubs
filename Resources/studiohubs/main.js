@@ -9,7 +9,8 @@ const DEFAULT_ORDER = [
   "Lucasfilm Ltd.",
   "Columbia Pictures",
   "Paramount Pictures",
-  "DreamWorks Animation"
+  "DreamWorks Animation",
+  "Fox"
 ];
 
 const STUDIO_ALIASES = {
@@ -18,6 +19,7 @@ const STUDIO_ALIASES = {
   "Walt Disney Pictures": ["walt disney"],
   "Disney+": ["disney plus", "disney+ originals", "disney plus originals"],
   "DC": ["dc entertainment"],
+  "Fox": ["20th century fox", "20th century studios", "twentieth century fox", "twentieth century studios", "fox searchlight pictures", "searchlight pictures", "20th television", "20th century television"],
   "Warner Bros. Pictures": ["warner bros", "warner bros.", "warner brothers"],
   "Lucasfilm Ltd.": ["lucasfilm", "lucasfilm ltd"],
   "Columbia Pictures": ["columbia", "columbia pictures industries"],
@@ -31,6 +33,7 @@ const STUDIO_VIDEO_SLUGS = {
   "Walt Disney Pictures": "walt-disney-pictures",
   "Disney+": "disney",
   "DC": "dc",
+  "Fox": "fox",
   "Warner Bros. Pictures": "warner-bros-pictures",
   "Lucasfilm Ltd.": "lucasfilm-ltd",
   "Columbia Pictures": "columbia-pictures",
@@ -46,6 +49,7 @@ const STUDIO_LOGO_SLUGS = {
   "Walt Disney Pictures": "walt-disney-pictures",
   "Disney+": "disney",
   "DC": "dc",
+  "Fox": "fox",
   "Warner Bros. Pictures": "warner-bros-pictures",
   "Lucasfilm Ltd.": "lucasfilm-ltd",
   "Columbia Pictures": "columbia-pictures",
@@ -53,6 +57,10 @@ const STUDIO_LOGO_SLUGS = {
   "Netflix": "netflix",
   "DreamWorks Animation": "dreamworks-animation",
   "Universal": "universal"
+};
+
+const STUDIO_LOGO_EXTENSIONS = {
+  Fox: "png"
 };
 
 const ALIAS_TO_CANONICAL = (() => {
@@ -626,7 +634,8 @@ function buildBundledLogoUrl(name) {
   const canonical = toCanonicalStudioName(name);
   const slug = STUDIO_LOGO_SLUGS[canonical] || STUDIO_LOGO_SLUGS[String(name || "").trim()] || "";
   if (!slug) return null;
-  return withServer(`/studiohubs/studios/${encodeURIComponent(slug)}.webp`);
+  const extension = STUDIO_LOGO_EXTENSIONS[canonical] || "webp";
+  return withServer(`/studiohubs/studios/${encodeURIComponent(slug)}.${encodeURIComponent(extension)}`);
 }
 
 function hasBundledLogo(name) {
