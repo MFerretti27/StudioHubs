@@ -5,6 +5,7 @@
   "overview": "Standalone studio hubs feature for Jellyfin home screen.",
   "owner": "StudioHubs",
   "category": "General",
+  "imagePath": "StudioHubs.png",
   "versions": [
     {
       "version": "1.0.0",

@@ -46,5 +46,9 @@
     <None Update="manifest.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Update="Resources/studiohubs/StudioHubs.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <TargetPath>StudioHubs.png</TargetPath>
+    </None>
   </ItemGroup>
 </Project>
