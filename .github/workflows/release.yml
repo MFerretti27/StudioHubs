@@ -1,19 +1,18 @@
 name: Release On Main
 
 on:
-  pull_request:
-    branches:
-      - main
-    types:
-      - closed
+  workflow_dispatch:
+    inputs:
+      release_notes:
+        description: Optional release notes body (markdown)
+        required: false
+        default: ""
 
 permissions:
   contents: write
-  pull-requests: read
 
 jobs:
   release:
-    if: ${{ github.event.pull_request.merged == true }}
     runs-on: ubuntu-latest
 
     steps:
@@ -57,7 +56,7 @@ jobs:
         env:
           NEXT_VERSION: ${{ steps.version.outputs.next_version }}
           RELEASE_URL: https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag_name }}/${{ steps.version.outputs.tag_name }}.zip
-          RELEASE_TS: ${{ github.event.pull_request.merged_at }}
+          RELEASE_TS: ${{ github.event.repository.updated_at }}
         shell: bash
         run: |
           set -euo pipefail
@@ -109,7 +108,8 @@ jobs:
             bin/Release/net9.0/publish/Jellyfin.Plugin.StudioHubs.dll \
             bin/Release/net9.0/publish/Jellyfin.Plugin.StudioHubs.deps.json \
             bin/Release/net9.0/publish/manifest.json \
-            bin/Release/net9.0/publish/meta.json
+            bin/Release/net9.0/publish/meta.json \
+            bin/Release/net9.0/publish/StudioHubs.png
 
           echo "zip_name=${zip_name}" >> "$GITHUB_OUTPUT"
 
@@ -127,7 +127,7 @@ jobs:
         env:
           NEXT_VERSION: ${{ steps.version.outputs.next_version }}
           RELEASE_URL: https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag_name }}/${{ steps.version.outputs.tag_name }}.zip
-          RELEASE_TS: ${{ github.event.pull_request.merged_at }}
+          RELEASE_TS: ${{ github.event.repository.updated_at }}
           ZIP_CHECKSUM: ${{ steps.checksum.outputs.zip_checksum }}
         shell: bash
         run: |
@@ -201,34 +201,17 @@ jobs:
             git push origin "$TAG_NAME"
           fi
 
-      - name: Resolve release notes from merged PR
-        id: pr_notes
+      - name: Resolve release notes
+        id: release_notes
         env:
-          PR_BODY: ${{ github.event.pull_request.body }}
-          PR_TITLE: ${{ github.event.pull_request.title }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
+          INPUT_NOTES: ${{ github.event.inputs.release_notes }}
         shell: bash
         run: |
           set -euo pipefail
 
-          pr_body="${PR_BODY//$'\r'/}"
-          release_body="$(
-            printf '%s\n' "${pr_body}" |
-            awk '
-              BEGIN { in_notes = 0 }
-              /^##[[:space:]]+Release Notes[[:space:]]*$/ { in_notes = 1; next }
-              /^##[[:space:]]+/ { if (in_notes) exit }
-              { if (in_notes) print }
-            ' |
-            sed '/^[[:space:]]*<!--/,/-->[[:space:]]*$/d'
-          )"
-
-          # Trim leading/trailing blank lines.
-          release_body="$(printf '%s\n' "${release_body}" | sed '/./,$!d' | tac | sed '/./,$!d' | tac)"
-
-          # Treat template placeholder as empty.
-          if [[ "${release_body}" == "-" ]] || [[ -z "${release_body//[[:space:]]/}" ]]; then
-            release_body="Release from merged PR #${PR_NUMBER}: ${PR_TITLE}"
+          release_body="${INPUT_NOTES//$'\r'/}"
+          if [[ -z "${release_body//[[:space:]]/}" ]]; then
+            release_body="Manual release triggered by @${GITHUB_ACTOR}."
           fi
 
           {
@@ -243,6 +226,6 @@ jobs:
           token: ${{ secrets.RELEASE_BOT_TOKEN || github.token }}
           tag_name: ${{ steps.version.outputs.tag_name }}
           name: ${{ steps.version.outputs.tag_name }}
-          body: ${{ steps.pr_notes.outputs.release_body }}
+          body: ${{ steps.release_notes.outputs.release_body }}
           generate_release_notes: false
           files: ${{ steps.package.outputs.zip_name }}

@@ -7,22 +7,6 @@
     "category": "General",
     "description": "Adds a configurable studio hubs row with admin-managed global studio visibility and order.",
     "versions": [
-      {
-        "version": "1.0.0",
-        "changelog": "Initial public release with global studio management and improved Home rendering behavior",
-        "targetAbi": "10.11.0.0",
-        "sourceUrl": "https://github.com/MFerretti27/StudioHubs/releases/download/StudioHubs_v1.0.0/StudioHubs_v1.0.0.zip",
-        "checksum": "9c03ffd41d0dc9f98baf0b9a4caf867d46091b90f33976477f92de1356340d34",
-        "timestamp": "2026-04-26T23:28:07Z"
-      },
-      {
-        "version": "1.0.1",
-        "changelog": "Initial public release with global studio management and improved Home rendering behavior",
-        "targetAbi": "10.11.0.0",
-        "sourceUrl": "https://github.com/MFerretti27/StudioHubs/releases/download/StudioHubs_v1.0.1/StudioHubs_v1.0.1.zip",
-        "checksum": "",
-        "timestamp": "2026-04-26T00:00:00Z"
-      }
     ]
   }
 ]
