@@ -73,15 +73,6 @@ For API endpoints, build output details, and release workflow notes, see:
 
 - [Developer Notes](docs/DEVELOPER.md)
 
-## Install (Manual)
-
-1. Stop Jellyfin
-2. Copy plugin files to the Studio Hubs plugin folder under Jellyfin plugins directory
-3. Start Jellyfin
-4. Open Admin Dashboard, Plugins, and confirm Studio Hubs is listed
-
-For Unraid deployments, use your standard Jellyfin plugin folder mapping and replace files with the latest build package.
-
 ## Notes
 
 - If Studio Hubs does not appear immediately, refresh the Catalog or restart Jellyfin.
