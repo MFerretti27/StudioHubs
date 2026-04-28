@@ -3,6 +3,10 @@ name: Create Release
 on:
   workflow_dispatch:
     inputs:
+      version:
+        description: "Optional release version override (format: X.Y.Z.W)"
+        required: false
+        default: ""
       release_notes:
         description: Optional release notes body (markdown)
         required: false
@@ -27,26 +31,56 @@ jobs:
         with:
           dotnet-version: 9.0.x
 
-      - name: Compute next StudioHubs tag
+      - name: Compute next release tag
         id: version
+        env:
+          REQUESTED_VERSION: ${{ github.event.inputs.version }}
         shell: bash
         run: |
           set -euo pipefail
 
-          latest_tag=$(git tag --list 'StudioHubs_v*' --sort=-v:refname | head -n1 || true)
+          latest_tag=$(
+            git tag --list --sort=-v:refname \
+              | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' \
+              | head -n1 || true
+          )
 
-          if [[ -z "${latest_tag}" ]]; then
-            next_version="1.0.0"
+          latest_version=""
+          if [[ -n "${latest_tag}" ]]; then
+            latest_version="${latest_tag#v}"
+          fi
+
+          requested_version="${REQUESTED_VERSION:-}"
+          requested_version="${requested_version//[[:space:]]/}"
+
+          if [[ -n "${requested_version}" ]]; then
+            requested_version="${requested_version#v}"
+
+            if [[ ! "${requested_version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "Invalid version input '${REQUESTED_VERSION}'. Use X.Y.Z.W (for example 1.0.1.0)."
+              exit 1
+            fi
+
+            if [[ -n "${latest_version}" ]]; then
+              highest=$(printf '%s\n%s\n' "${latest_version}" "${requested_version}" | sort -V | tail -n1)
+              if [[ "${requested_version}" == "${latest_version}" || "${highest}" != "${requested_version}" ]]; then
+                echo "Requested version ${requested_version} must be greater than latest tag version ${latest_version}."
+                exit 1
+              fi
+            fi
+
+            next_version="${requested_version}"
+          elif [[ -z "${latest_version}" ]]; then
+            next_version="1.0.0.0"
           else
-            raw_version="${latest_tag#StudioHubs_v}"
-            IFS='.' read -r major minor patch <<< "${raw_version}"
+            IFS='.' read -r major minor patch revision <<< "${latest_version}"
             major=${major:-1}
             minor=${minor:-0}
             patch=${patch:-0}
-            next_version="${major}.${minor}.$((patch + 1))"
+            next_version="${major}.${minor}.$((patch + 1)).0"
           fi
 
-          tag_name="StudioHubs_v${next_version}"
+          tag_name="v${next_version}"
 
           echo "latest_tag=${latest_tag}" >> "$GITHUB_OUTPUT"
           echo "next_version=${next_version}" >> "$GITHUB_OUTPUT"
@@ -55,7 +89,7 @@ jobs:
       - name: Prepare manifest and meta for release version
         env:
           NEXT_VERSION: ${{ steps.version.outputs.next_version }}
-          PLUGIN_VERSION: ${{ steps.version.outputs.next_version }}.0
+          PLUGIN_VERSION: ${{ steps.version.outputs.next_version }}
           RELEASE_URL: https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag_name }}/${{ steps.version.outputs.tag_name }}.zip
           RELEASE_TS: ${{ github.event.repository.updated_at }}
         shell: bash
@@ -95,7 +129,7 @@ jobs:
 
       - name: Sync project version
         env:
-          PLUGIN_VERSION: ${{ steps.version.outputs.next_version }}.0
+          PLUGIN_VERSION: ${{ steps.version.outputs.next_version }}
         shell: bash
         run: |
           set -euo pipefail
@@ -136,7 +170,7 @@ jobs:
       - name: Finalize manifest and meta checksum
         env:
           NEXT_VERSION: ${{ steps.version.outputs.next_version }}
-          PLUGIN_VERSION: ${{ steps.version.outputs.next_version }}.0
+          PLUGIN_VERSION: ${{ steps.version.outputs.next_version }}
           RELEASE_URL: https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag_name }}/${{ steps.version.outputs.tag_name }}.zip
           RELEASE_TS: ${{ github.event.repository.updated_at }}
           ZIP_CHECKSUM: ${{ steps.checksum.outputs.zip_checksum }}
