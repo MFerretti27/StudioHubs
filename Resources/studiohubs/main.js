@@ -19,7 +19,7 @@ const STUDIO_ALIASES = {
   "Walt Disney Pictures": ["walt disney"],
   "Disney+": ["disney plus", "disney+ originals", "disney plus originals"],
   "DC": ["dc entertainment"],
-  "Fox": ["20th century fox", "20th century studios", "twentieth century fox", "twentieth century studios", "fox searchlight pictures", "searchlight pictures", "20th television", "20th century television"],
+  "Fox": ["20th century fox", "20th century studios", "twentieth century fox", "twentieth century studios", "fox searchlight pictures", "searchlight pictures"],
   "Warner Bros. Pictures": ["warner bros", "warner bros.", "warner brothers"],
   "Lucasfilm Ltd.": ["lucasfilm", "lucasfilm ltd"],
   "Columbia Pictures": ["columbia", "columbia pictures industries"],
