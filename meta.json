@@ -8,6 +8,13 @@
   "imagePath": "StudioHubs.png",
   "versions": [
     {
+      "version": "1.0.0.0",
+      "targetAbi": "10.11.0.0",
+      "sourceUrl": "https://github.com/MFerretti27/StudioHubs/releases/download/StudioHubs_v1.0.0/StudioHubs_v1.0.0.zip",
+      "checksum": "b61571c9a8771012527b3219d7533f90",
+      "timestamp": "2026-04-28T01:32:49Z"
+    },
+    {
       "version": "1.0.3.0",
       "targetAbi": "10.11.0.0",
       "sourceUrl": "https://github.com/MFerretti27/StudioHubs/releases/download/StudioHubs_v1.0.3/StudioHubs_v1.0.3.zip",
