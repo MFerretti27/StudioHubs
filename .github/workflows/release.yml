@@ -55,6 +55,7 @@ jobs:
       - name: Prepare manifest and meta for release version
         env:
           NEXT_VERSION: ${{ steps.version.outputs.next_version }}
+          PLUGIN_VERSION: ${{ steps.version.outputs.next_version }}.0
           RELEASE_URL: https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag_name }}/${{ steps.version.outputs.tag_name }}.zip
           RELEASE_TS: ${{ github.event.repository.updated_at }}
         shell: bash
@@ -70,7 +71,7 @@ jobs:
           manifest_changelog="$(jq -r '.[0].versions[0].changelog // "Automated release"' manifest.json)"
 
           jq \
-            --arg version "$NEXT_VERSION" \
+            --arg version "$PLUGIN_VERSION" \
             --arg sourceUrl "$RELEASE_URL" \
             --arg checksum "" \
             --arg timestamp "$release_timestamp" \
@@ -83,7 +84,7 @@ jobs:
           meta_target_abi="$(jq -r '.versions[0].targetAbi // "10.11.0.0"' meta.json)"
 
           jq \
-            --arg version "$NEXT_VERSION" \
+            --arg version "$PLUGIN_VERSION" \
             --arg sourceUrl "$RELEASE_URL" \
             --arg checksum "" \
             --arg timestamp "$release_timestamp" \
@@ -94,12 +95,12 @@ jobs:
 
       - name: Sync project version
         env:
-          NEXT_VERSION: ${{ steps.version.outputs.next_version }}
+          PLUGIN_VERSION: ${{ steps.version.outputs.next_version }}.0
         shell: bash
         run: |
           set -euo pipefail
 
-          perl -0777 -i -pe 's|<Version>[^<]+</Version>|<Version>'"${NEXT_VERSION}"'</Version>|' StudioHubsPlugin.csproj
+          perl -0777 -i -pe 's|<Version>[^<]+</Version>|<Version>'"${PLUGIN_VERSION}"'</Version>|' StudioHubsPlugin.csproj
 
       - name: Build publish output
         run: dotnet publish -c Release
@@ -135,6 +136,7 @@ jobs:
       - name: Finalize manifest and meta checksum
         env:
           NEXT_VERSION: ${{ steps.version.outputs.next_version }}
+          PLUGIN_VERSION: ${{ steps.version.outputs.next_version }}.0
           RELEASE_URL: https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag_name }}/${{ steps.version.outputs.tag_name }}.zip
           RELEASE_TS: ${{ github.event.repository.updated_at }}
           ZIP_CHECKSUM: ${{ steps.checksum.outputs.zip_checksum }}
@@ -151,7 +153,7 @@ jobs:
           manifest_changelog="$(jq -r '.[0].versions[0].changelog // "Automated release"' manifest.json)"
 
           jq \
-            --arg version "$NEXT_VERSION" \
+            --arg version "$PLUGIN_VERSION" \
             --arg sourceUrl "$RELEASE_URL" \
             --arg checksum "$ZIP_CHECKSUM" \
             --arg timestamp "$release_timestamp" \
@@ -164,7 +166,7 @@ jobs:
           meta_target_abi="$(jq -r '.versions[0].targetAbi // "10.11.0.0"' meta.json)"
 
           jq \
-            --arg version "$NEXT_VERSION" \
+            --arg version "$PLUGIN_VERSION" \
             --arg sourceUrl "$RELEASE_URL" \
             --arg checksum "$ZIP_CHECKSUM" \
             --arg timestamp "$release_timestamp" \
