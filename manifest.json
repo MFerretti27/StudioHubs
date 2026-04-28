@@ -15,38 +15,6 @@
         "sourceUrl": "https://github.com/MFerretti27/StudioHubs/releases/download/StudioHubs_v1.0.0/StudioHubs_v1.0.0.zip",
         "checksum": "b61571c9a8771012527b3219d7533f90",
         "timestamp": "2026-04-28T01:32:49Z"
-      },
-      {
-        "version": "1.0.3.0",
-        "changelog": "Automated release",
-        "targetAbi": "10.11.0.0",
-        "sourceUrl": "https://github.com/MFerretti27/StudioHubs/releases/download/StudioHubs_v1.0.3/StudioHubs_v1.0.3.zip",
-        "checksum": "3b68fc71c54ba34cadb4dea88b2e41c9",
-        "timestamp": "2026-04-28T01:13:16Z"
-      },
-      {
-        "version": "1.0.2.0",
-        "changelog": "Automated release",
-        "targetAbi": "10.11.0.0",
-        "sourceUrl": "https://github.com/MFerretti27/StudioHubs/releases/download/StudioHubs_v1.0.2/StudioHubs_v1.0.2.zip",
-        "checksum": "2605e4629a203a303e3f4a2330ce0474",
-        "timestamp": "2026-04-27T04:58:15Z"
-      },
-      {
-        "version": "1.0.1",
-        "changelog": "Automated release",
-        "targetAbi": "10.11.0.0",
-        "sourceUrl": "https://github.com/MFerretti27/StudioHubs/releases/download/StudioHubs_v1.0.1/StudioHubs_v1.0.1.zip",
-        "checksum": "a367bdbb0328e82d587528701e15730e",
-        "timestamp": "2026-04-27T04:10:54Z"
-      },
-      {
-        "version": "1.0.0",
-        "changelog": "Automated release",
-        "targetAbi": "10.11.0.0",
-        "sourceUrl": "https://github.com/MFerretti27/StudioHubs/releases/download/StudioHubs_v1.0.0/StudioHubs_v1.0.0.zip",
-        "checksum": "75feebf33f11760ad5ff39af300f0d9a",
-        "timestamp": "2026-04-27T02:15:07Z"
       }
     ]
   }
