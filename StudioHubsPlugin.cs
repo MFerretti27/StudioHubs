@@ -13,7 +13,7 @@ public class StudioHubsPlugin : BasePlugin<StudioHubsConfiguration>, IHasWebPage
 {
     public override string Name => "Studio Hubs";
     public override Guid Id => Guid.Parse("8ab79914-1be0-4f4a-92aa-25ecf5ecad16");
-    public override string Description => "Standalone Studio Hubs home row for Jellyfin.";
+    public override string Description => "Jellyfin plugin for configurable Studio Hubs on Home Screen, with hover videos and configurable settings.";
 
     private readonly IApplicationPaths _paths;
     public static StudioHubsPlugin Instance { get; private set; } = null!;
