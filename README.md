@@ -1,5 +1,5 @@
 
-<h1 align="center">Studio Hubs Plugin</h1>
+<h1 align="center">StudioHubs Jellyfin Plugin</h1>
 <p align="center">
   <img src="Resources/studiohubs/StudioHubs.png" alt="Studio Hubs Logo" width="400"/>
 </p>
