@@ -1,12 +1,15 @@
-# Studio Hubs Plugin
 
+<h1 align="center">Studio Hubs Plugin</h1>
 <p align="center">
-	<img src="Resources/studiohubs/StudioHubs.png" alt="Studio Hubs Logo" width="200"/>
+  <img src="Resources/studiohubs/StudioHubs.png" alt="Studio Hubs Logo" width="400"/>
 </p>
 
-![Build](https://github.com/MFerretti27/StudioHubs/actions/workflows/build.yml/badge.svg?branch=master)
-![CodeQL](https://github.com/MFerretti27/StudioHubs/actions/workflows/build.yml/badge.svg?branch=master&event=codeql)
-![GitHub Releases](https://img.shields.io/github/downloads/MFerretti27/StudioHubs/total?label=Total%20Downloads&logo=github)
+
+<p align="center">
+  <img src="https://github.com/MFerretti27/StudioHubs/actions/workflows/build.yml/badge.svg?branch=master" alt="Build"/>
+  <img src="https://github.com/MFerretti27/StudioHubs/actions/workflows/build.yml/badge.svg?branch=master&event=codeql" alt="CodeQL"/>
+  <img src="https://img.shields.io/github/downloads/MFerretti27/StudioHubs/total?label=Total%20Downloads&logo=github" alt="GitHub Releases"/>
+</p>
 
 Jellyfin plugin that adds a Studio Hubs row to the Home screen.
 
@@ -18,11 +21,11 @@ This plugin was extracted from the Studio Hubs functionality in [G-grbz/Jellyfin
 ## Highlights
 
 - Adds a Studio Hubs row to Home screen with clickable studio cards
-- Uses admin-managed global settings for studio visibility and studio order
+- Uses admin-managed settings for studio visibility and studio order
 - Supports hover videos
 - Optional random order on each Home visit
 
-## Install (Jellyfin GUI via Repository)
+## Installation Steps
 
 You can install this plugin directly from Jellyfin's plugin catalog by adding this repository manifest URL:
 
