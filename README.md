@@ -25,7 +25,7 @@ This plugin was extracted from the Studio Hubs functionality in [G-grbz/Jellyfin
 - Supports hover videos
 - Optional random order on each Home visit
 
-## Installation Steps
+## Installation
 
 You can install this plugin directly from Jellyfin's plugin catalog by adding this repository manifest URL:
 
@@ -87,3 +87,22 @@ For API endpoints, build output details, and release workflow notes, see:
 ## Notes
 
 - If Studio Hubs does not appear immediately, refresh the Catalog or restart Jellyfin.
+
+---
+
+## License
+
+This project is licensed under the MIT License – see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+- **Jellyfin Team** – For the excellent media server platform
+- **IntroSkipper Plugin** – Architecture and CI/CD inspiration
+- **MONWUI** – Original Studio Hubs implementation and inspiration
+
+## Support
+
+- **Issues:** [GitHub Issues](../../issues)
+- **Discussions:** [GitHub Discussions](../../discussions)
+- **Jellyfin Community:** [Official Jellyfin Forums](https://forum.jellyfin.org/)
+
