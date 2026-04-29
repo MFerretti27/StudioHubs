@@ -97,7 +97,6 @@ This project is licensed under the MIT License – see the [LICENSE](LICENSE) fi
 ## Acknowledgments
 
 - **Jellyfin Team** – For the excellent media server platform
-- **IntroSkipper Plugin** – Architecture and CI/CD inspiration
 - **MONWUI** – Original Studio Hubs implementation and inspiration
 
 ## Support
