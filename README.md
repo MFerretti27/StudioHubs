@@ -1,6 +1,18 @@
-# Studio Hubs Plugin
 
-Standalone Jellyfin plugin that adds a Studio Hubs row to the Home screen.
+# StudioHubs Jellyfin Plugin
+
+<p align="center">
+  <img src="Resources/studiohubs/StudioHubs.png" alt="Studio Hubs Logo" width="600"/>
+</p>
+
+
+<p align="center">
+  <img src="https://github.com/MFerretti27/StudioHubs/actions/workflows/build.yml/badge.svg?branch=master" alt="Build"/>
+  <img src="https://github.com/MFerretti27/StudioHubs/actions/workflows/build.yml/badge.svg?branch=master&event=codeql" alt="CodeQL"/>
+  <img src="https://img.shields.io/github/downloads/MFerretti27/StudioHubs/total?label=Total%20Downloads&logo=github" alt="GitHub Releases"/>
+</p>
+
+Jellyfin plugin that adds a Studio Hubs row to the Home screen.
 
 This plugin was extracted from the Studio Hubs functionality in [G-grbz/Jellyfin-MonWUI-Plugin](https://github.com/G-grbz/Jellyfin-MonWUI-Plugin) and focuses only on Studio Hubs behavior.
 
@@ -10,11 +22,11 @@ This plugin was extracted from the Studio Hubs functionality in [G-grbz/Jellyfin
 ## Highlights
 
 - Adds a Studio Hubs row to Home screen with clickable studio cards
-- Uses admin-managed global settings for studio visibility and studio order
+- Uses admin-managed settings for studio visibility and studio order
 - Supports hover videos
 - Optional random order on each Home visit
 
-## Install (Jellyfin GUI via Repository)
+## Installation
 
 You can install this plugin directly from Jellyfin's plugin catalog by adding this repository manifest URL:
 
@@ -76,3 +88,21 @@ For API endpoints, build output details, and release workflow notes, see:
 ## Notes
 
 - If Studio Hubs does not appear immediately, refresh the Catalog or restart Jellyfin.
+
+---
+
+## License
+
+This project is licensed under the MIT License – see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+- **Jellyfin Team** – For the excellent media server platform
+- **MONWUI** – Original Studio Hubs implementation and inspiration
+
+## Support
+
+- **Issues:** [GitHub Issues](../../issues)
+- **Discussions:** [GitHub Discussions](../../discussions)
+- **Jellyfin Community:** [Official Jellyfin Forums](https://forum.jellyfin.org/)
+
