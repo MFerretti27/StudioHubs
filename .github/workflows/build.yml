@@ -1,0 +1,99 @@
+
+name: Build
+
+
+on:
+  push:
+    branches: main
+  pull_request:
+    branches: main
+
+jobs:
+
+  build:
+    name: Build (.NET)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+      - name: Restore
+        run: dotnet restore
+      - name: Build (Release)
+        run: dotnet build -c Release --no-restore
+  package-smoke:
+    name: Publish And Package Smoke Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+      - name: Publish
+        run: dotnet publish -c Release
+      - name: Verify required publish files exist
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f bin/Release/net9.0/publish/Jellyfin.Plugin.StudioHubs.dll
+          test -f bin/Release/net9.0/publish/Jellyfin.Plugin.StudioHubs.deps.json
+          test -f bin/Release/net9.0/publish/manifest.json
+          test -f bin/Release/net9.0/publish/meta.json
+      - name: Create package zip (smoke)
+        shell: bash
+        run: |
+          set -euo pipefail
+          zip -j StudioHubs-PR-smoke.zip \
+            bin/Release/net9.0/publish/Jellyfin.Plugin.StudioHubs.dll \
+            bin/Release/net9.0/publish/Jellyfin.Plugin.StudioHubs.deps.json \
+            bin/Release/net9.0/publish/manifest.json \
+            bin/Release/net9.0/publish/meta.json
+      - name: Verify zip contents
+        run: unzip -l StudioHubs-PR-smoke.zip
+
+  metadata-validate:
+    name: Validate Plugin Metadata JSON
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Validate manifest.json and meta.json syntax
+        run: |
+          jq . manifest.json > /dev/null
+          jq . meta.json > /dev/null
+
+  codeql:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v3
+      with:
+        languages: csharp
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '9.0.x'
+
+    - name: Restore dependencies
+      run: dotnet restore
+
+    - name: Build
+      run: dotnet build --no-restore --configuration Release --property:TreatWarningsAsErrors=false
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v3

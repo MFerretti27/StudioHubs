@@ -1,6 +1,14 @@
 # Studio Hubs Plugin
 
-Standalone Jellyfin plugin that adds a Studio Hubs row to the Home screen.
+<p align="center">
+	<img src="Resources/studiohubs/StudioHubs.png" alt="Studio Hubs Logo" width="200"/>
+</p>
+
+![Build](https://github.com/MFerretti27/StudioHubs/actions/workflows/build.yml/badge.svg?branch=master)
+![CodeQL](https://github.com/MFerretti27/StudioHubs/actions/workflows/build.yml/badge.svg?branch=master&event=codeql)
+![GitHub Releases](https://img.shields.io/github/downloads/MFerretti27/StudioHubs/total?label=Total%20Downloads&logo=github)
+
+Jellyfin plugin that adds a Studio Hubs row to the Home screen.
 
 This plugin was extracted from the Studio Hubs functionality in [G-grbz/Jellyfin-MonWUI-Plugin](https://github.com/G-grbz/Jellyfin-MonWUI-Plugin) and focuses only on Studio Hubs behavior.
 
