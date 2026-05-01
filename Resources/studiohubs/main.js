@@ -1,6 +1,7 @@
 const DEFAULT_ORDER = [
   "Netflix",
   "Disney+",
+  "Apple TV+",
   "DC",
   "Marvel Studios",
   "Pixar",
@@ -18,6 +19,7 @@ const STUDIO_ALIASES = {
   "Pixar": ["pixar animation studios", "disney pixar"],
   "Walt Disney Pictures": ["walt disney"],
   "Disney+": ["disney plus", "disney+ originals", "disney plus originals"],
+  "Apple TV+": ["apple tv", "apple tv plus", "apple original", "apple originals", "apple tv+ originals"],
   "DC": ["dc entertainment"],
   "Fox": ["20th century fox", "20th century studios", "twentieth century fox", "twentieth century studios", "fox searchlight pictures", "searchlight pictures"],
   "Warner Bros. Pictures": ["warner bros", "warner bros.", "warner brothers"],
@@ -32,6 +34,7 @@ const STUDIO_VIDEO_SLUGS = {
   "Pixar": "pixar",
   "Walt Disney Pictures": "walt-disney-pictures",
   "Disney+": "disney",
+  "Apple TV+": "apple-tv-plus",
   "DC": "dc",
   "Fox": "fox",
   "Warner Bros. Pictures": "warner-bros-pictures",
@@ -48,6 +51,7 @@ const STUDIO_LOGO_SLUGS = {
   "Pixar": "pixar",
   "Walt Disney Pictures": "walt-disney-pictures",
   "Disney+": "disney",
+  "Apple TV+": "apple-tv-plus",
   "DC": "dc",
   "Fox": "fox",
   "Warner Bros. Pictures": "warner-bros-pictures",
@@ -60,7 +64,8 @@ const STUDIO_LOGO_SLUGS = {
 };
 
 const STUDIO_LOGO_EXTENSIONS = {
-  Fox: "png"
+  Fox: "png",
+  "Apple TV+": "png"
 };
 
 const ALIAS_TO_CANONICAL = (() => {
