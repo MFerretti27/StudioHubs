@@ -28,6 +28,7 @@ namespace Jellyfin.Plugin.StudioHubs.Controllers
             "Pixar",
             "Walt Disney Pictures",
             "Disney+",
+            "Apple TV+",
             "DC",
             "Fox",
             "Warner Bros. Pictures",
