@@ -1032,6 +1032,7 @@ function scheduleRender(options = {}) {
 
   tickHomeVisitState();
 
+
   if (options.prepaint !== false && isHomeVisible()) {
     const root = getHomeContainer();
     if (root) {
@@ -1040,6 +1041,14 @@ function scheduleRender(options = {}) {
       setupRowScroller(section, row);
       ensureLoadingState(row);
       section.style.display = "";
+    } else {
+      // Home container not ready yet, retry soon
+      if (!options._retryCount || options._retryCount < 10) {
+        setTimeout(() => {
+          scheduleRender({ ...options, _retryCount: (options._retryCount || 0) + 1, delayMs: 100 });
+        }, 100);
+      }
+      return;
     }
   }
 
