@@ -621,6 +621,7 @@ namespace Jellyfin.Plugin.StudioHubs.Controllers
             {
                 "Netflix",
                 "Disney+",
+                "Apple TV+",
                 "DC",
                 "Marvel Studios",
                 "Pixar",
