@@ -15,18 +15,18 @@ const DEFAULT_ORDER = [
 ];
 
 const STUDIO_ALIASES = {
-  "Marvel Studios": ["marvel", "marvel entertainment", "marvel studios llc"],
-  "Pixar": ["pixar animation studios", "disney pixar"],
-  "Walt Disney Pictures": ["walt disney"],
-  "Disney+": ["disney plus", "disney+ originals", "disney plus originals"],
-  "Apple TV+": ["apple tv", "apple tv plus", "apple original", "apple originals", "apple tv+ originals"],
-  "DC": ["dc entertainment"],
-  "Fox": ["20th century fox", "20th century studios", "twentieth century fox", "twentieth century studios", "fox searchlight pictures", "searchlight pictures"],
-  "Warner Bros. Pictures": ["warner bros", "warner bros.", "warner brothers"],
-  "Lucasfilm Ltd.": ["lucasfilm", "lucasfilm ltd"],
-  "Columbia Pictures": ["columbia", "columbia pictures industries"],
-  "Paramount Pictures": ["paramount", "paramount pictures corporation"],
-  "DreamWorks Animation": ["dreamworks", "dreamworks pictures"]
+  "marvel studios": ["marvel", "marvel entertainment", "marvel studios llc"],
+  "pixar": ["pixar animation studios", "disney pixar"],
+  "walt disney pictures": ["walt disney"],
+  "disney+": ["disney plus", "disney+ originals", "disney plus originals"],
+  "apple tv+": ["apple tv", "apple tv plus", "apple original", "apple originals", "apple tv+ originals", "apple studios"],
+  "dc": ["dc entertainment"],
+  "fox": ["20th century fox", "20th century studios", "twentieth century fox", "twentieth century studios", "fox searchlight pictures", "searchlight pictures"],
+  "warner bros. pictures": ["warner bros", "warner bros.", "warner brothers"],
+  "lucasfilm ltd.": ["lucasfilm", "lucasfilm ltd"],
+  "columbia pictures": ["columbia", "columbia pictures industries"],
+  "paramount pictures": ["paramount", "paramount pictures corporation"],
+  "dreamworks animation": ["dreamworks", "dreamworks pictures"]
 };
 
 const STUDIO_VIDEO_SLUGS = {
@@ -71,7 +71,8 @@ const STUDIO_LOGO_EXTENSIONS = {
 const ALIAS_TO_CANONICAL = (() => {
   const map = new Map();
   for (const [canonical, aliases] of Object.entries(STUDIO_ALIASES)) {
-    map.set(String(canonical).toLowerCase(), canonical);
+    const canonicalLower = String(canonical).toLowerCase();
+    map.set(canonicalLower, canonical);
     for (const alias of aliases || []) {
       map.set(String(alias).toLowerCase(), canonical);
     }
@@ -386,9 +387,11 @@ async function fetchJsonViaApiClient(url) {
 }
 
 async function fetchJson(url) {
+
   try {
     return await fetchJsonViaApiClient(url);
-  } catch {
+  } catch (err) {
+    console.error("[StudioHubs] fetchJsonViaApiClient failed:", err, url);
     // fall back to manual request path for environments without ApiClient JSON helpers
   }
 
@@ -398,14 +401,19 @@ async function fetchJson(url) {
     ? `${url}${url.includes("?") ? "&" : "?"}api_key=${encodeURIComponent(token)}`
     : url;
 
-  const res = await fetch(withServer(requestUrl), {
-    method: "GET",
-    headers,
-    cache: "no-store",
-    credentials: "same-origin"
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+  try {
+    const res = await fetch(withServer(requestUrl), {
+      method: "GET",
+      headers,
+      cache: "no-store",
+      credentials: "same-origin"
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return res.json();
+  } catch (err) {
+    console.error("[StudioHubs] fetchJson failed:", err, requestUrl);
+    throw err;
+  }
 }
 
 async function getCurrentUserIdSafe() {
@@ -542,9 +550,9 @@ function normalizeNameLoose(value) {
 }
 
 function toCanonicalStudioName(name) {
-  const clean = String(name || "").trim();
+  const clean = String(name || "").trim().toLowerCase();
   if (!clean) return "";
-  return ALIAS_TO_CANONICAL.get(clean.toLowerCase()) || clean;
+  return ALIAS_TO_CANONICAL.get(clean) || name;
 }
 
 function buildStudioLookup(studios) {
@@ -865,7 +873,14 @@ async function renderStudioHubs(force = false) {
     setupRowScroller(section, row);
     ensureLoadingState(row);
 
-    const cfg = await getCfg();
+    let cfg;
+    try {
+      cfg = await getCfg();
+    } catch (err) {
+      console.error("[StudioHubs] getCfg failed:", err);
+      ensureEmptyState(row, "Failed to load configuration.");
+      return;
+    }
     if (!cfg.enablePlugin || !cfg.enableStudioHubs || !cfg.enabled) {
       section.style.display = "none";
       return;
@@ -874,12 +889,26 @@ async function renderStudioHubs(force = false) {
     section.style.display = "";
     const renderDebug = [];
 
-    const userId = await getCurrentUserIdSafe();
+    let userId;
+    try {
+      userId = await getCurrentUserIdSafe();
+    } catch (err) {
+      console.error("[StudioHubs] getCurrentUserIdSafe failed:", err);
+      ensureEmptyState(row, "Failed to get user information.");
+      return;
+    }
 
-    const [manualEntries, videoEntries] = await Promise.all([
-      fetchManualEntries().catch(() => []),
-      fetchVideoEntries().catch(() => []),
-    ]);
+    let manualEntries = [], videoEntries = [];
+    try {
+      [manualEntries, videoEntries] = await Promise.all([
+        fetchManualEntries().catch((err) => { console.error("[StudioHubs] fetchManualEntries failed:", err); return []; }),
+        fetchVideoEntries().catch((err) => { console.error("[StudioHubs] fetchVideoEntries failed:", err); return []; }),
+      ]);
+    } catch (err) {
+      console.error("[StudioHubs] fetch manual/video entries failed:", err);
+      ensureEmptyState(row, "Failed to load studio data.");
+      return;
+    }
 
     // Use admin-configured studio order and visibility (global for all users)
     const adminStudioOrder = Array.isArray(cfg.studioHubsStudioOrder) && cfg.studioHubsStudioOrder.length > 0
@@ -982,6 +1011,14 @@ async function renderStudioHubs(force = false) {
     }
 
     section.style.display = "";
+  } catch (err) {
+    console.error("[StudioHubs] renderStudioHubs failed:", err);
+    const root = getHomeContainer();
+    if (root) {
+      const section = ensureSection(root);
+      const row = section.querySelector(".studio-hubs-row");
+      ensureEmptyState(row, "An error occurred while rendering studios.");
+    }
   } finally {
     busy = false;
   }
@@ -995,6 +1032,7 @@ function scheduleRender(options = {}) {
 
   tickHomeVisitState();
 
+
   if (options.prepaint !== false && isHomeVisible()) {
     const root = getHomeContainer();
     if (root) {
@@ -1003,6 +1041,14 @@ function scheduleRender(options = {}) {
       setupRowScroller(section, row);
       ensureLoadingState(row);
       section.style.display = "";
+    } else {
+      // Home container not ready yet, retry soon
+      if (!options._retryCount || options._retryCount < 10) {
+        setTimeout(() => {
+          scheduleRender({ ...options, _retryCount: (options._retryCount || 0) + 1, delayMs: 100 });
+        }, 100);
+      }
+      return;
     }
   }
 
@@ -1014,7 +1060,16 @@ function scheduleRender(options = {}) {
 }
 
 function installLifecycleHooks() {
-  const onNav = () => scheduleRender({ force: true, delayMs: FAST_RENDER_DELAY_MS });
+  const onNav = () => {
+    scheduleRender({ force: true, delayMs: FAST_RENDER_DELAY_MS });
+    // Fallback: after a short delay, check if cards are missing and force another render if needed
+    setTimeout(() => {
+      const row = document.querySelector(".studio-hubs-row");
+      if (row && !row.querySelector(".studio-hub-card") && !row.querySelector(".studio-hubs-empty")) {
+        scheduleRender({ force: true, delayMs: 0 });
+      }
+    }, 800);
+  };
 
   // Jellyfin Web can navigate without a hard reload or hash change.
   window.addEventListener("hashchange", onNav, { passive: true });
