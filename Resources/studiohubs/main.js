@@ -21,7 +21,7 @@ const STUDIO_ALIASES = {
   "disney+": ["disney plus", "disney+ originals", "disney plus originals"],
   "apple tv+": ["apple tv", "apple tv plus", "apple original", "apple originals", "apple tv+ originals", "apple studios"],
   "dc": ["dc entertainment"],
-  "fox": ["20th century fox", "20th century studios", "twentieth century fox", "twentieth century studios", "fox searchlight pictures", "searchlight pictures"],
+  "fox": ["20th century fox", "20th century studios", "twentieth century fox", "twentieth century studios", "fox searchlight pictures", "searchlight pictures", "20th Century Fox"],
   "warner bros. pictures": ["warner bros", "warner bros.", "warner brothers"],
   "lucasfilm ltd.": ["lucasfilm", "lucasfilm ltd"],
   "columbia pictures": ["columbia", "columbia pictures industries"],
@@ -68,13 +68,49 @@ const STUDIO_LOGO_EXTENSIONS = {
   "Apple TV+": "png"
 };
 
+const CANONICAL_DISPLAY_BY_KEY = (() => {
+  const map = new Map();
+  const add = (name) => {
+    const key = String(name || "").trim().toLowerCase();
+    if (!key || map.has(key)) return;
+    map.set(key, String(name || "").trim());
+  };
+
+  Object.keys(STUDIO_LOGO_SLUGS).forEach(add);
+  Object.keys(STUDIO_VIDEO_SLUGS).forEach(add);
+  DEFAULT_ORDER.forEach(add);
+  return map;
+})();
+
 const ALIAS_TO_CANONICAL = (() => {
   const map = new Map();
   for (const [canonical, aliases] of Object.entries(STUDIO_ALIASES)) {
-    const canonicalLower = String(canonical).toLowerCase();
-    map.set(canonicalLower, canonical);
+    const canonicalKey = String(canonical || "").trim().toLowerCase();
+    const canonicalDisplay = CANONICAL_DISPLAY_BY_KEY.get(canonicalKey) || canonical;
+    map.set(canonicalKey, canonicalDisplay);
     for (const alias of aliases || []) {
-      map.set(String(alias).toLowerCase(), canonical);
+      map.set(String(alias || "").trim().toLowerCase(), canonicalDisplay);
+    }
+  }
+  return map;
+})();
+
+const ALIAS_TO_CANONICAL_LOOSE = (() => {
+  const map = new Map();
+  for (const [canonical, aliases] of Object.entries(STUDIO_ALIASES)) {
+    const canonicalKey = String(canonical || "").trim().toLowerCase();
+    const canonicalDisplay = CANONICAL_DISPLAY_BY_KEY.get(canonicalKey) || canonical;
+
+    const canonicalLoose = normalizeNameLoose(canonical);
+    if (canonicalLoose && !map.has(canonicalLoose)) {
+      map.set(canonicalLoose, canonicalDisplay);
+    }
+
+    for (const alias of aliases || []) {
+      const aliasLoose = normalizeNameLoose(alias);
+      if (aliasLoose && !map.has(aliasLoose)) {
+        map.set(aliasLoose, canonicalDisplay);
+      }
     }
   }
   return map;
@@ -550,9 +586,36 @@ function normalizeNameLoose(value) {
 }
 
 function toCanonicalStudioName(name) {
-  const clean = String(name || "").trim().toLowerCase();
-  if (!clean) return "";
-  return ALIAS_TO_CANONICAL.get(clean) || name;
+  const raw = String(name || "").trim();
+  if (!raw) return "";
+
+  const exactKey = raw.toLowerCase();
+  const exact = ALIAS_TO_CANONICAL.get(exactKey);
+  if (exact) return exact;
+
+  const looseKey = normalizeNameLoose(raw);
+  const loose = ALIAS_TO_CANONICAL_LOOSE.get(looseKey);
+  if (loose) return loose;
+
+  return CANONICAL_DISPLAY_BY_KEY.get(exactKey) || raw;
+}
+
+function getStudioMapValue(map, name) {
+  const raw = String(name || "").trim();
+  if (!raw) return "";
+
+  if (Object.prototype.hasOwnProperty.call(map, raw)) {
+    return map[raw];
+  }
+
+  const lower = raw.toLowerCase();
+  for (const [key, value] of Object.entries(map)) {
+    if (String(key).toLowerCase() === lower) {
+      return value;
+    }
+  }
+
+  return "";
 }
 
 function buildStudioLookup(studios) {
@@ -645,15 +708,15 @@ function buildLogoUrl(entry) {
 
 function buildBundledLogoUrl(name) {
   const canonical = toCanonicalStudioName(name);
-  const slug = STUDIO_LOGO_SLUGS[canonical] || STUDIO_LOGO_SLUGS[String(name || "").trim()] || "";
+  const slug = getStudioMapValue(STUDIO_LOGO_SLUGS, canonical) || getStudioMapValue(STUDIO_LOGO_SLUGS, name);
   if (!slug) return null;
-  const extension = STUDIO_LOGO_EXTENSIONS[canonical] || "webp";
+  const extension = getStudioMapValue(STUDIO_LOGO_EXTENSIONS, canonical) || getStudioMapValue(STUDIO_LOGO_EXTENSIONS, name) || "webp";
   return withServer(`/studiohubs/studios/${encodeURIComponent(slug)}.${encodeURIComponent(extension)}`);
 }
 
 function hasBundledLogo(name) {
   const canonical = toCanonicalStudioName(name);
-  const slug = STUDIO_LOGO_SLUGS[canonical] || STUDIO_LOGO_SLUGS[String(name || "").trim()] || "";
+  const slug = getStudioMapValue(STUDIO_LOGO_SLUGS, canonical) || getStudioMapValue(STUDIO_LOGO_SLUGS, name);
   return !!slug;
 }
 
@@ -678,7 +741,7 @@ function buildVideoUrl(entry) {
 
 function buildBundledVideoUrl(name) {
   const canonical = toCanonicalStudioName(name);
-  const slug = STUDIO_VIDEO_SLUGS[canonical] || STUDIO_VIDEO_SLUGS[String(name || "").trim()] || "";
+  const slug = getStudioMapValue(STUDIO_VIDEO_SLUGS, canonical) || getStudioMapValue(STUDIO_VIDEO_SLUGS, name);
   if (!slug) return null;
   return withServer(`/studiohubs/videos/${encodeURIComponent(slug)}.mp4`);
 }
