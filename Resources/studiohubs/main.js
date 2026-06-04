@@ -10,23 +10,31 @@ const DEFAULT_ORDER = [
   "Lucasfilm Ltd.",
   "Columbia Pictures",
   "Paramount Pictures",
+  "MGM Studios",
+  "Sony Pictures",
   "DreamWorks Animation",
+  "Lionsgate",
+  "Amazon Prime",
   "Fox"
 ];
 
 const STUDIO_ALIASES = {
   "marvel studios": ["marvel", "marvel entertainment", "marvel studios llc"],
   "pixar": ["pixar animation studios", "disney pixar"],
-  "walt disney pictures": ["walt disney"],
+  "walt disney pictures": ["walt disney pictures", "walt disney animation studios", "walt disney studios motion pictures"],
   "disney+": ["disney plus", "disney+ originals", "disney plus originals"],
   "apple tv+": ["apple tv", "apple tv plus", "apple original", "apple originals", "apple tv+ originals", "apple studios"],
-  "dc": ["dc entertainment"],
+  "dc": ["dc entertainment", "dc studios"],
   "fox": ["20th century fox", "20th century studios", "twentieth century fox", "twentieth century studios", "fox searchlight pictures", "searchlight pictures", "20th Century Fox"],
   "warner bros. pictures": ["warner bros", "warner bros.", "warner brothers"],
   "lucasfilm ltd.": ["lucasfilm", "lucasfilm ltd"],
   "columbia pictures": ["columbia", "columbia pictures industries"],
   "paramount pictures": ["paramount", "paramount pictures corporation"],
-  "dreamworks animation": ["dreamworks", "dreamworks pictures"]
+  "mgm studios": ["mgm", "metro goldwyn mayer", "metro-goldwyn-mayer", "metro-goldwyn-mayer studios", "amazon mgm studios"],
+  "sony pictures": ["sony", "sony pictures entertainment", "sony pictures classics", "sony pictures animation", "sony pictures television"],
+  "dreamworks animation": ["dreamworks", "dreamworks pictures"],
+  "amazon prime": ["amazon studios", "prime video", "amazon prime video", "amazon mgm studios"],
+  "lionsgate": ["lions gate", "lions gate entertainment", "lions gate entertainment corp", "lions gate films"]
 };
 
 const STUDIO_VIDEO_SLUGS = {
@@ -41,8 +49,12 @@ const STUDIO_VIDEO_SLUGS = {
   "Lucasfilm Ltd.": "lucasfilm-ltd",
   "Columbia Pictures": "columbia-pictures",
   "Paramount Pictures": "paramount-pictures",
+  "MGM Studios": "metro-goldwyn-mayer",
+  "Sony Pictures": "sony",
   "Netflix": "netflix",
   "DreamWorks Animation": "dreamworks-animation",
+  "Lionsgate": "lionsgate",
+  "Amazon Prime": "prime",
   "Universal": "universal"
 };
 
@@ -58,14 +70,22 @@ const STUDIO_LOGO_SLUGS = {
   "Lucasfilm Ltd.": "lucasfilm-ltd",
   "Columbia Pictures": "columbia-pictures",
   "Paramount Pictures": "paramount-pictures",
+  "MGM Studios": "metro-goldwyn-mayer",
+  "Sony Pictures": "sony",
   "Netflix": "netflix",
   "DreamWorks Animation": "dreamworks-animation",
+  "Lionsgate": "lionsgate",
+  "Amazon Prime": "prime",
   "Universal": "universal"
 };
 
 const STUDIO_LOGO_EXTENSIONS = {
   Fox: "png",
-  "Apple TV+": "png"
+  "Apple TV+": "png",
+  "MGM Studios": "png",
+  "Sony Pictures": "png",
+  "Lionsgate": "webp",
+  "Amazon Prime": "png"
 };
 
 const CANONICAL_DISPLAY_BY_KEY = (() => {
@@ -902,8 +922,15 @@ function buildBundledLogoUrl(name) {
   const canonical = toCanonicalStudioName(name);
   const slug = getStudioMapValue(STUDIO_LOGO_SLUGS, canonical) || getStudioMapValue(STUDIO_LOGO_SLUGS, name);
   if (!slug) return null;
-  const extension = getStudioMapValue(STUDIO_LOGO_EXTENSIONS, canonical) || getStudioMapValue(STUDIO_LOGO_EXTENSIONS, name) || "webp";
-  return withServer(`/studiohubs/studios/${encodeURIComponent(slug)}.${encodeURIComponent(extension)}`);
+  const extensionValue = getStudioMapValue(STUDIO_LOGO_EXTENSIONS, canonical);
+  const fallbackExtensionValue = getStudioMapValue(STUDIO_LOGO_EXTENSIONS, name);
+  const extension = extensionValue !== undefined ? extensionValue : fallbackExtensionValue;
+
+  if (extension === "") {
+    return withServer(`/studiohubs/studios/${encodeURIComponent(slug)}`);
+  }
+
+  return withServer(`/studiohubs/studios/${encodeURIComponent(slug)}.${encodeURIComponent(extension || "webp")}`);
 }
 
 function hasBundledLogo(name) {

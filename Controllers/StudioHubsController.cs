@@ -616,7 +616,7 @@ namespace Jellyfin.Plugin.StudioHubs.Controllers
             var plugin = StudioHubsPlugin.Instance ?? throw new InvalidOperationException("Plugin not available.");
             var cfg = plugin.Configuration;
 
-            // Get all available studios from the default list and manual entries
+            // Get all available studios from the built-in list and manual entries
             var availableStudios = new List<string>
             {
                 "Netflix",
@@ -626,12 +626,17 @@ namespace Jellyfin.Plugin.StudioHubs.Controllers
                 "Marvel Studios",
                 "Pixar",
                 "Walt Disney Pictures",
-                "Fox",
                 "Warner Bros. Pictures",
                 "Lucasfilm Ltd.",
                 "Columbia Pictures",
                 "Paramount Pictures",
-                "DreamWorks Animation"
+                "MGM Studios",
+                "Sony Pictures",
+                "DreamWorks Animation",
+                "Lionsgate",
+                "Amazon Prime",
+                "Fox",
+                "Universal"
             };
 
             // Add manual entries that aren't already in the default list
