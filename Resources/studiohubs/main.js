@@ -129,6 +129,8 @@ const CACHE = {
   videoEntriesTs: 0,
 };
 const STUDIO_ID_BY_NAME_CACHE = new Map();
+const STUDIO_IDS_BY_NAME_CACHE = new Map();
+const STUDIO_MEDIA_COUNTS_CACHE = new Map();
 const DEBUG_STATE = {
   lastRender: [],
   lastAt: 0,
@@ -648,35 +650,225 @@ function resolveStudioByName(lookup, name) {
   return lookup.byExact.get(exact) || lookup.byLoose.get(loose) || null;
 }
 
-async function resolveStudioIdByName(name) {
-  const canonical = toCanonicalStudioName(name);
-  const key = normalizeName(canonical || name);
-  if (!key) return "";
+function scoreStudioCandidateName(studioName, targetName) {
+  const studioRaw = String(studioName || "").trim();
+  const targetCanonical = toCanonicalStudioName(targetName);
 
-  if (STUDIO_ID_BY_NAME_CACHE.has(key)) {
-    return STUDIO_ID_BY_NAME_CACHE.get(key) || "";
+  const studioExact = normalizeName(studioRaw);
+  const targetExact = normalizeName(targetCanonical || targetName);
+  const studioCanonicalExact = normalizeName(toCanonicalStudioName(studioRaw));
+
+  const studioLoose = normalizeNameLoose(studioRaw);
+  const targetLoose = normalizeNameLoose(targetCanonical || targetName);
+
+  let score = 0;
+  if (studioExact && studioExact === targetExact) score += 10;
+  if (studioCanonicalExact && studioCanonicalExact === targetExact) score += 8;
+  if (studioLoose && studioLoose === targetLoose) score += 5;
+  if (targetExact && studioExact.includes(targetExact)) score += 2;
+  return score;
+}
+
+async function fetchStudioTypeCount(userId, studioId, includeItemTypes) {
+  const cacheKey = `${String(userId || "").trim()}:${String(studioId || "").trim()}:${includeItemTypes}`;
+  if (STUDIO_MEDIA_COUNTS_CACHE.has(cacheKey)) {
+    return Number(STUDIO_MEDIA_COUNTS_CACHE.get(cacheKey) || 0);
   }
 
   try {
-    const searchTerm = String(canonical || name || "").trim();
     const qs = new URLSearchParams({
       Recursive: "true",
-      Limit: "60",
-      SortBy: "SortName",
-      SortOrder: "Ascending",
-      ...(searchTerm ? { SearchTerm: searchTerm } : {}),
+      Limit: "1",
+      IncludeItemTypes: includeItemTypes,
+      StudioIds: String(studioId || "").trim(),
     });
 
-    const payload = await fetchJson(`/Studios?${qs.toString()}`);
-    const items = Array.isArray(payload?.Items) ? payload.Items : [];
-    const lookup = buildStudioLookup(items);
-    const matched = resolveStudioByName(lookup, canonical || name);
-    const id = String(matched?.Id || "").trim();
+    const payload = await fetchJson(`/Users/${encodeURIComponent(userId)}/Items?${qs.toString()}`);
+    const count = Number(payload?.TotalRecordCount || 0);
+    STUDIO_MEDIA_COUNTS_CACHE.set(cacheKey, count);
+    return count;
+  } catch {
+    STUDIO_MEDIA_COUNTS_CACHE.set(cacheKey, 0);
+    return 0;
+  }
+}
+
+function getStudioSearchTerms(name) {
+  const canonical = toCanonicalStudioName(name);
+  const canonicalKey = normalizeName(canonical);
+  const aliases = Array.isArray(STUDIO_ALIASES[canonicalKey]) ? STUDIO_ALIASES[canonicalKey] : [];
+
+  const out = [];
+  const seen = new Set();
+  const add = (term) => {
+    const clean = String(term || "").trim();
+    if (!clean) return;
+    const key = clean.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(clean);
+  };
+
+  add(canonical);
+  add(name);
+  aliases.forEach(add);
+  return out.slice(0, 8);
+}
+
+async function resolveStudioIdByName(name) {
+  const resolved = await resolveStudioIdsByName(name);
+  return resolved?.primaryId || "";
+}
+
+async function resolveStudioIdsByName(name) {
+  const canonical = toCanonicalStudioName(name);
+  const key = normalizeName(canonical || name);
+  if (!key) return { primaryId: "", studioIds: [] };
+
+  if (STUDIO_IDS_BY_NAME_CACHE.has(key)) {
+    const cachedIds = Array.isArray(STUDIO_IDS_BY_NAME_CACHE.get(key))
+      ? STUDIO_IDS_BY_NAME_CACHE.get(key)
+      : [];
+    const primaryId = String(cachedIds[0] || STUDIO_ID_BY_NAME_CACHE.get(key) || "").trim();
+    return {
+      primaryId,
+      studioIds: cachedIds.filter(Boolean),
+    };
+  }
+
+  if (STUDIO_ID_BY_NAME_CACHE.has(key)) {
+    const cachedPrimary = String(STUDIO_ID_BY_NAME_CACHE.get(key) || "").trim();
+    return {
+      primaryId: cachedPrimary,
+      studioIds: cachedPrimary ? [cachedPrimary] : [],
+    };
+  }
+
+  try {
+    const terms = getStudioSearchTerms(canonical || name);
+    const payloads = await Promise.all(terms.map(async (searchTerm) => {
+      const qs = new URLSearchParams({
+        Recursive: "true",
+        Limit: "60",
+        SortBy: "SortName",
+        SortOrder: "Ascending",
+        ...(searchTerm ? { SearchTerm: searchTerm } : {}),
+      });
+      return fetchJson(`/Studios?${qs.toString()}`).catch(() => ({ Items: [] }));
+    }));
+
+    const allItems = [];
+    const seenStudioIds = new Set();
+    for (const payload of payloads) {
+      for (const item of Array.isArray(payload?.Items) ? payload.Items : []) {
+        const id = String(item?.Id || "").trim();
+        const studioName = String(item?.Name || "").trim();
+        if (!id || !studioName || seenStudioIds.has(id)) continue;
+        seenStudioIds.add(id);
+        allItems.push(item);
+      }
+    }
+
+    if (!allItems.length) {
+      STUDIO_ID_BY_NAME_CACHE.set(key, "");
+      STUDIO_IDS_BY_NAME_CACHE.set(key, []);
+      return { primaryId: "", studioIds: [] };
+    }
+
+    const scored = allItems
+      .map((studio) => ({
+        studio,
+        score: scoreStudioCandidateName(studio?.Name, canonical || name),
+      }))
+      .sort((a, b) => b.score - a.score);
+
+    const strongest = scored[0]?.score || 0;
+    const candidates = scored
+      .filter((entry) => entry.score >= Math.max(0, strongest - 3))
+      .slice(0, 8);
+
+    let chosen = candidates[0]?.studio || null;
+    let chosenScore = Number(candidates[0]?.score || 0);
+    let approvedIds = [];
+    const userId = await getCurrentUserIdSafe().catch(() => "");
+    if (userId && candidates.length > 1) {
+      const enriched = await Promise.all(candidates.map(async ({ studio, score }) => {
+        const id = String(studio?.Id || "").trim();
+        const movieCount = id ? await fetchStudioTypeCount(userId, id, "Movie") : 0;
+        const seriesCount = id ? await fetchStudioTypeCount(userId, id, "Series") : 0;
+        return {
+          studio,
+          score,
+          movieCount,
+          seriesCount,
+        };
+      }));
+
+      enriched.sort((a, b) => {
+        if (b.movieCount !== a.movieCount) return b.movieCount - a.movieCount;
+        if (b.score !== a.score) return b.score - a.score;
+        if (b.seriesCount !== a.seriesCount) return b.seriesCount - a.seriesCount;
+        return String(a.studio?.Name || "").localeCompare(String(b.studio?.Name || ""));
+      });
+
+      const primary = enriched[0] || null;
+      chosen = primary?.studio || chosen;
+      chosenScore = Number(primary?.score || chosenScore || 0);
+
+      let coveredMovies = Number(primary?.movieCount || 0) > 0;
+      let coveredSeries = Number(primary?.seriesCount || 0) > 0;
+
+      if (primary?.studio?.Id) {
+        approvedIds.push(String(primary.studio.Id).trim());
+      }
+
+      for (const candidate of enriched.slice(1)) {
+        const candidateId = String(candidate?.studio?.Id || "").trim();
+        if (!candidateId || approvedIds.includes(candidateId)) continue;
+
+        const confidenceGate = Number(candidate?.score || 0) >= Math.max(6, chosenScore - 1);
+        if (!confidenceGate) continue;
+
+        const hasMovies = Number(candidate?.movieCount || 0) > 0;
+        const hasSeries = Number(candidate?.seriesCount || 0) > 0;
+        if (!hasMovies && !hasSeries) continue;
+
+        const addsMissingType = (!coveredMovies && hasMovies) || (!coveredSeries && hasSeries);
+        const salvageCase = !coveredMovies && !coveredSeries;
+        if (!addsMissingType && !salvageCase) continue;
+
+        approvedIds.push(candidateId);
+        coveredMovies = coveredMovies || hasMovies;
+        coveredSeries = coveredSeries || hasSeries;
+
+        if (coveredMovies && coveredSeries) break;
+      }
+
+      if (!approvedIds.length) {
+        const fallbackPrimaryId = String(primary?.studio?.Id || "").trim();
+        if (fallbackPrimaryId) approvedIds = [fallbackPrimaryId];
+      }
+    }
+
+    const lookup = buildStudioLookup(allItems);
+    const fallback = resolveStudioByName(lookup, canonical || name);
+    const id = String(chosen?.Id || fallback?.Id || "").trim();
+
+    if (!approvedIds.length && id) {
+      approvedIds = [id];
+    }
+
+    const uniqueApprovedIds = Array.from(new Set(approvedIds.filter(Boolean))).slice(0, 4);
     STUDIO_ID_BY_NAME_CACHE.set(key, id);
-    return id;
+    STUDIO_IDS_BY_NAME_CACHE.set(key, uniqueApprovedIds);
+    return {
+      primaryId: id,
+      studioIds: uniqueApprovedIds,
+    };
   } catch {
     STUDIO_ID_BY_NAME_CACHE.set(key, "");
-    return "";
+    STUDIO_IDS_BY_NAME_CACHE.set(key, []);
+    return { primaryId: "", studioIds: [] };
   }
 }
 
@@ -752,10 +944,29 @@ function pickBackdrop(item) {
   return withServer(`/Items/${item.Id}/Images/Backdrop/0?tag=${encodeURIComponent(tags[0])}&quality=90`);
 }
 
-function buildStudioHref(studioId, name) {
+function buildStudioHref(studioId, name, studioIds = []) {
   const serverId = window.ApiClient?._serverInfo?.Id || "";
-  if (studioId) {
-    return `#/list?studioId=${encodeURIComponent(studioId)}${serverId ? `&serverId=${encodeURIComponent(serverId)}` : ""}`;
+  const ids = Array.from(new Set(
+    (Array.isArray(studioIds) ? studioIds : [])
+      .map((id) => String(id || "").trim())
+      .filter(Boolean)
+  ));
+
+  if (studioId && !ids.includes(studioId)) {
+    ids.unshift(studioId);
+  }
+
+  if (ids.length > 1) {
+    const qs = new URLSearchParams();
+    qs.set("studioId", ids[0]);
+    qs.set("studioIds", ids.join(","));
+    if (serverId) qs.set("serverId", String(serverId));
+    return `#/list?${qs.toString()}`;
+  }
+
+  if (studioId || ids.length === 1) {
+    const selectedId = String(studioId || ids[0] || "").trim();
+    return `#/list?studioId=${encodeURIComponent(selectedId)}${serverId ? `&serverId=${encodeURIComponent(serverId)}` : ""}`;
   }
   return `#/search.html?query=${encodeURIComponent(name)}`;
 }
@@ -775,12 +986,13 @@ async function fetchStudioItems(userId, studioId) {
   return Array.isArray(payload?.Items) ? payload.Items : [];
 }
 
-function createCard(name, studioId, logoUrl, backdropUrl, videoUrl) {
+function createCard(name, studioId, logoUrl, backdropUrl, videoUrl, studioIds = []) {
   const a = document.createElement("a");
   a.className = "studio-hub-card";
-  a.href = buildStudioHref(studioId, name);
+  a.href = buildStudioHref(studioId, name, studioIds);
   a.dataset.studioName = String(name || "");
   a.dataset.studioId = String(studioId || "");
+  a.dataset.studioIds = Array.isArray(studioIds) ? studioIds.join(",") : "";
   a.dataset.hrefSource = studioId ? "studioId" : "search";
   a.dataset.studioPending = studioId ? "0" : "1";
   a.setAttribute("aria-label", name);
@@ -833,18 +1045,26 @@ async function resolvePendingCardLinks(row) {
 
   const resolvedByKey = new Map();
   await Promise.all(Array.from(nameKeys.entries()).map(async ([key, rawName]) => {
-    const id = await resolveStudioIdByName(rawName).catch(() => "");
-    resolvedByKey.set(key, String(id || "").trim());
+    const resolved = await resolveStudioIdsByName(rawName).catch(() => ({ primaryId: "", studioIds: [] }));
+    resolvedByKey.set(key, {
+      primaryId: String(resolved?.primaryId || "").trim(),
+      studioIds: Array.isArray(resolved?.studioIds)
+        ? resolved.studioIds.map((x) => String(x || "").trim()).filter(Boolean)
+        : [],
+    });
   }));
 
   for (const card of pendingCards) {
     const rawName = String(card.dataset.studioName || card.getAttribute("aria-label") || "").trim();
     const key = normalizeName(rawName);
-    const id = key ? (resolvedByKey.get(key) || "") : "";
+    const resolved = key ? resolvedByKey.get(key) : null;
+    const id = String(resolved?.primaryId || "").trim();
+    const studioIds = Array.isArray(resolved?.studioIds) ? resolved.studioIds : [];
     if (!id) continue;
 
-    card.href = buildStudioHref(id, rawName);
+    card.href = buildStudioHref(id, rawName, studioIds);
     card.dataset.studioId = id;
+    card.dataset.studioIds = studioIds.join(",");
     card.dataset.hrefSource = "studioId";
     card.dataset.studioPending = "0";
   }
@@ -1024,6 +1244,7 @@ async function renderStudioHubs(force = false) {
       cardModels.push({
         displayName: displayName || name,
         studioId,
+        studioIds: studioId ? [studioId] : [],
         logoUrl,
         backdropUrl,
         videoUrl,
@@ -1033,8 +1254,9 @@ async function renderStudioHubs(force = false) {
         displayName: String(displayName || ""),
         manualStudioId,
         resolvedStudioId: String(studioId || ""),
+        resolvedStudioIds: studioId ? [String(studioId)] : [],
         idSource,
-        href: buildStudioHref(studioId, displayName || name),
+        href: buildStudioHref(studioId, displayName || name, studioId ? [studioId] : []),
       });
     }
 
@@ -1057,6 +1279,7 @@ async function renderStudioHubs(force = false) {
         cardModel.logoUrl,
         cardModel.backdropUrl,
         cardModel.videoUrl,
+        cardModel.studioIds,
       ));
     }
 
@@ -1180,10 +1403,11 @@ function boot() {
       }));
     },
     async resolve(name) {
-      const id = await resolveStudioIdByName(name);
+      const resolved = await resolveStudioIdsByName(name);
       return {
         name: String(name || ""),
-        resolvedStudioId: String(id || ""),
+        resolvedStudioId: String(resolved?.primaryId || ""),
+        resolvedStudioIds: Array.isArray(resolved?.studioIds) ? resolved.studioIds : [],
       };
     },
     lastAt() {
