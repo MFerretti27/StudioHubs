@@ -922,9 +922,25 @@ function buildBundledLogoUrl(name) {
   const canonical = toCanonicalStudioName(name);
   const slug = getStudioMapValue(STUDIO_LOGO_SLUGS, canonical) || getStudioMapValue(STUDIO_LOGO_SLUGS, name);
   if (!slug) return null;
-  const extensionValue = getStudioMapValue(STUDIO_LOGO_EXTENSIONS, canonical);
-  const fallbackExtensionValue = getStudioMapValue(STUDIO_LOGO_EXTENSIONS, name);
-  const extension = extensionValue !== undefined ? extensionValue : fallbackExtensionValue;
+  const resolveMappedExtension = (studioName) => {
+    const rawName = String(studioName || "").trim();
+    if (!rawName) return null;
+
+    if (Object.prototype.hasOwnProperty.call(STUDIO_LOGO_EXTENSIONS, rawName)) {
+      return STUDIO_LOGO_EXTENSIONS[rawName];
+    }
+
+    const lower = rawName.toLowerCase();
+    for (const [key, value] of Object.entries(STUDIO_LOGO_EXTENSIONS)) {
+      if (String(key).toLowerCase() === lower) {
+        return value;
+      }
+    }
+
+    return null;
+  };
+
+  const extension = resolveMappedExtension(canonical) ?? resolveMappedExtension(name) ?? "webp";
 
   if (extension === "") {
     return withServer(`/studiohubs/studios/${encodeURIComponent(slug)}`);
@@ -1059,11 +1075,11 @@ function createCard(name, studioId, logoUrl, backdropUrl, videoUrl, studioIds = 
 async function resolvePendingCardLinks(row) {
   if (!row) return;
 
-  const pendingCards = Array.from(row.querySelectorAll(".studio-hub-card[data-studio-pending='1']"));
-  if (!pendingCards.length) return;
+  const cards = Array.from(row.querySelectorAll(".studio-hub-card"));
+  if (!cards.length) return;
 
   const nameKeys = new Map();
-  for (const card of pendingCards) {
+  for (const card of cards) {
     const rawName = String(card.dataset.studioName || card.getAttribute("aria-label") || "").trim();
     const key = normalizeName(rawName);
     if (!key) continue;
@@ -1081,18 +1097,31 @@ async function resolvePendingCardLinks(row) {
     });
   }));
 
-  for (const card of pendingCards) {
+  for (const card of cards) {
     const rawName = String(card.dataset.studioName || card.getAttribute("aria-label") || "").trim();
     const key = normalizeName(rawName);
     const resolved = key ? resolvedByKey.get(key) : null;
-    const id = String(resolved?.primaryId || "").trim();
-    const studioIds = Array.isArray(resolved?.studioIds) ? resolved.studioIds : [];
-    if (!id) continue;
+    const resolvedIds = Array.isArray(resolved?.studioIds) ? resolved.studioIds : [];
 
-    card.href = buildStudioHref(id, rawName, studioIds);
-    card.dataset.studioId = id;
-    card.dataset.studioIds = studioIds.join(",");
-    card.dataset.hrefSource = "studioId";
+    const existingId = String(card.dataset.studioId || "").trim();
+    const existingIds = String(card.dataset.studioIds || "")
+      .split(",")
+      .map((x) => String(x || "").trim())
+      .filter(Boolean);
+
+    const mergedIds = Array.from(new Set([
+      existingId,
+      ...existingIds,
+      ...resolvedIds,
+    ].filter(Boolean))).slice(0, 4);
+
+    const primaryId = String(resolved?.primaryId || existingId || mergedIds[0] || "").trim();
+    if (!primaryId) continue;
+
+    card.href = buildStudioHref(primaryId, rawName, mergedIds);
+    card.dataset.studioId = primaryId;
+    card.dataset.studioIds = mergedIds.join(",");
+    card.dataset.hrefSource = resolved?.primaryId ? "studioId+aliases" : "studioId";
     card.dataset.studioPending = "0";
   }
 }
