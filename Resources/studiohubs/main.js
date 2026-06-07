@@ -166,6 +166,7 @@ const MIN_RENDER_INTERVAL_MS = 900;
 const FAST_RENDER_DELAY_MS = 40;
 const DEFAULT_RENDER_DELAY_MS = 120;
 const PLUGIN_DATA_CACHE_TTL_MS = 15 * 1000;
+const STUDIO_MODAL_LIMIT = 48;
 let busy = false;
 let scheduleTimer = null;
 let lastRenderAt = 0;
@@ -1070,6 +1071,206 @@ async function fetchStudioItems(userId, studioId) {
   return Array.isArray(payload?.Items) ? payload.Items : [];
 }
 
+function getStudioModalElements() {
+  let root = document.getElementById("studio-hubs-modal");
+  if (!root) {
+    root = document.createElement("div");
+    root.id = "studio-hubs-modal";
+    root.className = "studio-hubs-modal";
+    root.innerHTML = `
+      <div class="studio-hubs-modal__backdrop" data-close="1"></div>
+      <div class="studio-hubs-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="studio-hubs-modal-title">
+        <button type="button" class="studio-hubs-modal__close" aria-label="Close">Close</button>
+        <div class="studio-hubs-modal__header">
+          <h2 id="studio-hubs-modal-title" class="studio-hubs-modal__title">Studio</h2>
+        </div>
+        <div class="studio-hubs-modal__body">
+          <section class="studio-hubs-modal__section">
+            <h3 class="studio-hubs-modal__section-title">Movies</h3>
+            <div class="studio-hubs-modal__grid" data-section="movies"></div>
+          </section>
+          <section class="studio-hubs-modal__section">
+            <h3 class="studio-hubs-modal__section-title">TV Shows</h3>
+            <div class="studio-hubs-modal__grid" data-section="series"></div>
+          </section>
+        </div>
+      </div>
+    `;
+
+    const close = () => {
+      root.classList.remove("is-open");
+      document.body.classList.remove("studio-hubs-modal-open");
+    };
+
+    root.querySelector(".studio-hubs-modal__backdrop")?.addEventListener("click", close);
+    root.querySelector(".studio-hubs-modal__close")?.addEventListener("click", close);
+    document.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape" && root.classList.contains("is-open")) {
+        close();
+      }
+    });
+
+    document.body.appendChild(root);
+  }
+
+  return {
+    root,
+    title: root.querySelector("#studio-hubs-modal-title"),
+    moviesGrid: root.querySelector('[data-section="movies"]'),
+    seriesGrid: root.querySelector('[data-section="series"]'),
+  };
+}
+
+function closeStudioSectionsModal() {
+  const root = document.getElementById("studio-hubs-modal");
+  if (!root) return;
+  root.classList.remove("is-open");
+  document.body.classList.remove("studio-hubs-modal-open");
+}
+
+function buildStudioModalItemHref(itemId) {
+  const id = String(itemId || "").trim();
+  if (!id) return "#/";
+  const serverId = String(window.ApiClient?._serverInfo?.Id || "").trim();
+  const qs = new URLSearchParams({ id });
+  if (serverId) qs.set("serverId", serverId);
+  return `#/details?${qs.toString()}`;
+}
+
+function buildStudioModalItemImage(item) {
+  const id = String(item?.Id || "").trim();
+  if (!id) return "";
+
+  const primaryTag = String(item?.ImageTags?.Primary || "").trim();
+  if (!primaryTag) return "";
+
+  const qs = new URLSearchParams({
+    tag: primaryTag,
+    fillWidth: "360",
+    fillHeight: "540",
+    quality: "90",
+  });
+
+  return withServer(`/Items/${encodeURIComponent(id)}/Images/Primary?${qs.toString()}`);
+}
+
+async function fetchStudioItemsByTypes(userId, studioIds, includeItemTypes) {
+  const ids = Array.from(new Set((studioIds || []).map((x) => String(x || "").trim()).filter(Boolean)));
+  if (!userId || !ids.length) return [];
+
+  const qs = new URLSearchParams({
+    StartIndex: "0",
+    Limit: String(STUDIO_MODAL_LIMIT),
+    Recursive: "true",
+    IncludeItemTypes: includeItemTypes,
+    SortBy: "DateCreated,SortName",
+    SortOrder: "Descending",
+    Fields: "ImageTags,PrimaryImageAspectRatio,ProductionYear,CommunityRating",
+    StudioIds: ids.join(","),
+  });
+
+  const payload = await fetchJson(`/Users/${encodeURIComponent(userId)}/Items?${qs.toString()}`);
+  return Array.isArray(payload?.Items) ? payload.Items : [];
+}
+
+function renderStudioModalGrid(gridEl, items, emptyText) {
+  if (!gridEl) return;
+  gridEl.innerHTML = "";
+
+  if (!Array.isArray(items) || !items.length) {
+    const empty = document.createElement("div");
+    empty.className = "studio-hubs-modal__empty";
+    empty.textContent = emptyText;
+    gridEl.appendChild(empty);
+    return;
+  }
+
+  for (const item of items) {
+    const id = String(item?.Id || "").trim();
+    const name = String(item?.Name || "Untitled").trim() || "Untitled";
+
+    const card = document.createElement("a");
+    card.className = "studio-hubs-modal__item";
+    card.href = buildStudioModalItemHref(id);
+    card.setAttribute("aria-label", name);
+    card.addEventListener("click", () => {
+      closeStudioSectionsModal();
+    });
+
+    const imageUrl = buildStudioModalItemImage(item);
+    if (imageUrl) {
+      const img = document.createElement("img");
+      img.className = "studio-hubs-modal__item-image";
+      img.src = imageUrl;
+      img.alt = name;
+      card.appendChild(img);
+    } else {
+      const fallback = document.createElement("div");
+      fallback.className = "studio-hubs-modal__item-fallback";
+      fallback.textContent = name;
+      card.appendChild(fallback);
+    }
+
+    const label = document.createElement("div");
+    label.className = "studio-hubs-modal__item-title";
+    label.textContent = name;
+    card.appendChild(label);
+
+    gridEl.appendChild(card);
+  }
+}
+
+async function openStudioSectionsModal(name, studioId, studioIds = []) {
+  const modal = getStudioModalElements();
+  if (!modal?.root || !modal.moviesGrid || !modal.seriesGrid) return;
+
+  const title = String(name || "Studio").trim() || "Studio";
+  if (modal.title) {
+    modal.title.textContent = title;
+  }
+
+  modal.moviesGrid.innerHTML = '<div class="studio-hubs-modal__empty">Loading movies...</div>';
+  modal.seriesGrid.innerHTML = '<div class="studio-hubs-modal__empty">Loading TV shows...</div>';
+  modal.root.classList.add("is-open");
+  document.body.classList.add("studio-hubs-modal-open");
+
+  const seedIds = Array.from(new Set([
+    String(studioId || "").trim(),
+    ...(Array.isArray(studioIds) ? studioIds : []).map((x) => String(x || "").trim()),
+  ].filter(Boolean)));
+
+  let resolvedIds = seedIds;
+  if (!resolvedIds.length) {
+    const resolved = await resolveStudioIdsByName(title).catch(() => ({ studioIds: [] }));
+    resolvedIds = Array.from(new Set(
+      (Array.isArray(resolved?.studioIds) ? resolved.studioIds : [])
+        .map((x) => String(x || "").trim())
+        .filter(Boolean)
+    ));
+  }
+
+  if (!resolvedIds.length) {
+    renderStudioModalGrid(modal.moviesGrid, [], "No movies found for this studio.");
+    renderStudioModalGrid(modal.seriesGrid, [], "No TV shows found for this studio.");
+    return;
+  }
+
+  const userId = await getCurrentUserIdSafe().catch(() => "");
+  if (!userId) {
+    renderStudioModalGrid(modal.moviesGrid, [], "Could not determine current user.");
+    renderStudioModalGrid(modal.seriesGrid, [], "Could not determine current user.");
+    return;
+  }
+
+  const [movies, series] = await Promise.all([
+    fetchStudioItemsByTypes(userId, resolvedIds, "Movie").catch(() => []),
+    fetchStudioItemsByTypes(userId, resolvedIds, "Series").catch(() => []),
+  ]);
+
+  renderStudioModalGrid(modal.moviesGrid, movies, "No movies found for this studio.");
+  renderStudioModalGrid(modal.seriesGrid, series, "No TV shows found for this studio.");
+}
+
 function createCard(name, studioId, logoUrl, backdropUrl, videoUrl, studioIds = []) {
   const a = document.createElement("a");
   a.className = "studio-hub-card";
@@ -1109,6 +1310,14 @@ function createCard(name, studioId, logoUrl, backdropUrl, videoUrl, studioIds = 
       video.classList.remove("on");
     });
   }
+
+  a.addEventListener("click", (ev) => {
+    if (ev.defaultPrevented) return;
+    if (ev.button !== 0) return;
+    if (ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
+    ev.preventDefault();
+    void openStudioSectionsModal(name, studioId, studioIds);
+  });
 
   return a;
 }
