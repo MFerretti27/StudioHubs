@@ -789,6 +789,38 @@ async function resolveStudioIdsByName(name) {
       }
     }
 
+    // Some servers return sparse/empty results from /Studios for valid names.
+    // Fall back to scanning user media and extracting referenced studio IDs.
+    if (!allItems.length) {
+      const fallbackUserId = await getCurrentUserIdSafe().catch(() => "");
+      if (fallbackUserId) {
+        const mediaPayloads = await Promise.all(terms.map(async (searchTerm) => {
+          const qs = new URLSearchParams({
+            Recursive: "true",
+            Limit: "300",
+            IncludeItemTypes: "Movie,Series",
+            Fields: "Studios",
+            ...(searchTerm ? { SearchTerm: searchTerm } : {}),
+          });
+
+          return fetchJson(`/Users/${encodeURIComponent(fallbackUserId)}/Items?${qs.toString()}`)
+            .catch(() => ({ Items: [] }));
+        }));
+
+        for (const payload of mediaPayloads) {
+          for (const media of Array.isArray(payload?.Items) ? payload.Items : []) {
+            for (const studio of Array.isArray(media?.Studios) ? media.Studios : []) {
+              const id = String(studio?.Id || "").trim();
+              const studioName = String(studio?.Name || "").trim();
+              if (!id || !studioName || seenStudioIds.has(id)) continue;
+              seenStudioIds.add(id);
+              allItems.push({ Id: id, Name: studioName });
+            }
+          }
+        }
+      }
+    }
+
     if (!allItems.length) {
       STUDIO_ID_BY_NAME_CACHE.set(key, "");
       STUDIO_IDS_BY_NAME_CACHE.set(key, []);
@@ -810,12 +842,12 @@ async function resolveStudioIdsByName(name) {
     let chosen = candidates[0]?.studio || null;
     let chosenScore = Number(candidates[0]?.score || 0);
     let approvedIds = [];
-    const userId = await getCurrentUserIdSafe().catch(() => "");
-    if (userId && candidates.length > 1) {
+    const userIdForCounts = await getCurrentUserIdSafe().catch(() => "");
+    if (userIdForCounts && candidates.length > 1) {
       const enriched = await Promise.all(candidates.map(async ({ studio, score }) => {
         const id = String(studio?.Id || "").trim();
-        const movieCount = id ? await fetchStudioTypeCount(userId, id, "Movie") : 0;
-        const seriesCount = id ? await fetchStudioTypeCount(userId, id, "Series") : 0;
+        const movieCount = id ? await fetchStudioTypeCount(userIdForCounts, id, "Movie") : 0;
+        const seriesCount = id ? await fetchStudioTypeCount(userIdForCounts, id, "Series") : 0;
         return {
           studio,
           score,
@@ -995,12 +1027,18 @@ function buildStudioHref(studioId, name, studioIds = []) {
       .filter(Boolean)
   ));
 
+  const appendCommonListParams = (qs) => {
+    qs.set("includeItemTypes", "Movie,Series");
+    qs.set("recursive", "true");
+    return qs;
+  };
+
   if (studioId && !ids.includes(studioId)) {
     ids.unshift(studioId);
   }
 
   if (ids.length > 1) {
-    const qs = new URLSearchParams();
+    const qs = appendCommonListParams(new URLSearchParams());
     qs.set("studioId", ids[0]);
     qs.set("studioIds", ids.join(","));
     if (serverId) qs.set("serverId", String(serverId));
@@ -1009,7 +1047,10 @@ function buildStudioHref(studioId, name, studioIds = []) {
 
   if (studioId || ids.length === 1) {
     const selectedId = String(studioId || ids[0] || "").trim();
-    return `#/list?studioId=${encodeURIComponent(selectedId)}${serverId ? `&serverId=${encodeURIComponent(serverId)}` : ""}`;
+    const qs = appendCommonListParams(new URLSearchParams());
+    qs.set("studioId", selectedId);
+    if (serverId) qs.set("serverId", String(serverId));
+    return `#/list?${qs.toString()}`;
   }
   return `#/search.html?query=${encodeURIComponent(name)}`;
 }
