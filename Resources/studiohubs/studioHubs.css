@@ -52,7 +52,7 @@
   padding: 10px;
   transform: scale(0.9);
   z-index: 1;
-  background: #1c1c2e;
+  background: transparent;
 }
 
 .studio-hub-card:hover .studio-hub-logo {

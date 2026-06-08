@@ -1239,15 +1239,14 @@ async function openStudioSectionsModal(name, studioId, studioIds = []) {
     ...(Array.isArray(studioIds) ? studioIds : []).map((x) => String(x || "").trim()),
   ].filter(Boolean)));
 
-  let resolvedIds = seedIds;
-  if (!resolvedIds.length) {
-    const resolved = await resolveStudioIdsByName(title).catch(() => ({ studioIds: [] }));
-    resolvedIds = Array.from(new Set(
-      (Array.isArray(resolved?.studioIds) ? resolved.studioIds : [])
-        .map((x) => String(x || "").trim())
-        .filter(Boolean)
-    ));
-  }
+  // Always merge name-resolved aliases so split studio IDs can cover both Movies and TV.
+  const resolvedByName = await resolveStudioIdsByName(title).catch(() => ({ studioIds: [] }));
+  let resolvedIds = Array.from(new Set([
+    ...seedIds,
+    ...(Array.isArray(resolvedByName?.studioIds) ? resolvedByName.studioIds : [])
+      .map((x) => String(x || "").trim())
+      .filter(Boolean),
+  ]));
 
   if (!resolvedIds.length) {
     renderStudioModalGrid(modal.moviesGrid, [], "No movies found for this studio.");
@@ -1316,7 +1315,16 @@ function createCard(name, studioId, logoUrl, backdropUrl, videoUrl, studioIds = 
     if (ev.button !== 0) return;
     if (ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
     ev.preventDefault();
-    void openStudioSectionsModal(name, studioId, studioIds);
+
+    // Prefer dataset values because they may have been enriched after first paint.
+    const liveName = String(a.dataset.studioName || name || "").trim();
+    const liveStudioId = String(a.dataset.studioId || studioId || "").trim();
+    const liveStudioIds = String(a.dataset.studioIds || "")
+      .split(",")
+      .map((x) => String(x || "").trim())
+      .filter(Boolean);
+
+    void openStudioSectionsModal(liveName || name, liveStudioId || studioId, liveStudioIds.length ? liveStudioIds : studioIds);
   });
 
   return a;
