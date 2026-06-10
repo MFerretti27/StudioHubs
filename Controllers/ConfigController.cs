@@ -15,6 +15,7 @@ public sealed class StudioHubsConfigUpdateDto
     public int? StudioHubsCardCount { get; set; }
     public bool? StudioHubsHoverVideo { get; set; }
     public bool? StudioHubsRandomOrder { get; set; }
+    public int? StudioHubsInitialHoverPreloadCount { get; set; }
     public string? StudioHubsPlaceAfter { get; set; }
     public string? StudioHubsPlaceBefore { get; set; }
 }
@@ -49,6 +50,7 @@ public sealed class ConfigController : ControllerBase
                 cfg.StudioHubsCardCount,
                 cfg.StudioHubsHoverVideo,
                 cfg.StudioHubsRandomOrder,
+                cfg.StudioHubsInitialHoverPreloadCount,
                 cfg.StudioHubsPlaceAfter,
                 cfg.StudioHubsPlaceBefore
             }
@@ -97,6 +99,11 @@ public sealed class ConfigController : ControllerBase
             cfg.StudioHubsRandomOrder = randomOrder;
         }
 
+        if (incoming?.StudioHubsInitialHoverPreloadCount is int preloadCount)
+        {
+            cfg.StudioHubsInitialHoverPreloadCount = Math.Clamp(preloadCount, 0, 24);
+        }
+
         if (incoming?.StudioHubsPlaceAfter is not null)
         {
             cfg.StudioHubsPlaceAfter = NormalizeKeywordCsv(incoming.StudioHubsPlaceAfter);
@@ -120,6 +127,7 @@ public sealed class ConfigController : ControllerBase
                 cfg.StudioHubsCardCount,
                 cfg.StudioHubsHoverVideo,
                 cfg.StudioHubsRandomOrder,
+                cfg.StudioHubsInitialHoverPreloadCount,
                 cfg.StudioHubsPlaceAfter,
                 cfg.StudioHubsPlaceBefore
             }

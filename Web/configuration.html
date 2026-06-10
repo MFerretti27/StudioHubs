@@ -21,6 +21,12 @@
         </label>
 
         <div class="inputContainer">
+          <label class="inputLabel" for="studioHubsInitialHoverPreloadCount">Initial hover preload count</label>
+          <input id="studioHubsInitialHoverPreloadCount" type="number" class="emby-input" min="0" max="24" step="1" />
+          <div class="fieldDescription">How many Home cards should start preloading hover videos immediately after the row renders. A higher number makes first-hover playback more likely to feel instant, but uses more bandwidth up front.</div>
+        </div>
+
+        <div class="inputContainer">
           <label class="inputLabel" for="studioHubsPlaceAfter">Place after sections</label>
           <input id="studioHubsPlaceAfter" type="text" class="emby-input" placeholder="continue watching" />
           <div class="fieldDescription">Comma-separated section title fragments.</div>
@@ -217,11 +223,13 @@
       function applyConfig(cfg) {
         const hoverVideo = getCfgValue(cfg, "studioHubsHoverVideo", "StudioHubsHoverVideo", true);
         const randomOrder = getCfgValue(cfg, "studioHubsRandomOrder", "StudioHubsRandomOrder", false);
+        const initialHoverPreloadCount = getCfgValue(cfg, "studioHubsInitialHoverPreloadCount", "StudioHubsInitialHoverPreloadCount", 5);
         const placeAfter = getCfgValue(cfg, "studioHubsPlaceAfter", "StudioHubsPlaceAfter", "continue watching");
         const placeBefore = getCfgValue(cfg, "studioHubsPlaceBefore", "StudioHubsPlaceBefore", "recently added,latest,recent");
 
         input("studioHubsHoverVideo").checked = hoverVideo !== false;
         input("studioHubsRandomOrder").checked = randomOrder === true;
+        input("studioHubsInitialHoverPreloadCount").value = String(Number.isFinite(Number(initialHoverPreloadCount)) ? Math.max(0, Math.min(24, Number(initialHoverPreloadCount))) : 5);
         input("studioHubsPlaceAfter").value = String(placeAfter || "continue watching");
         input("studioHubsPlaceBefore").value = String(placeBefore || "recently added,latest,recent");
       }
@@ -264,9 +272,11 @@
 
       async function saveConfig() {
         setStatus("Saving...", null);
+        const preloadCount = Math.max(0, Math.min(24, Number.parseInt(String(input("studioHubsInitialHoverPreloadCount").value || "5"), 10) || 0));
         const body = {
           studioHubsHoverVideo: input("studioHubsHoverVideo").checked,
           studioHubsRandomOrder: input("studioHubsRandomOrder").checked,
+          studioHubsInitialHoverPreloadCount: preloadCount,
           studioHubsPlaceAfter: String(input("studioHubsPlaceAfter").value || "").trim(),
           studioHubsPlaceBefore: String(input("studioHubsPlaceBefore").value || "").trim()
         };

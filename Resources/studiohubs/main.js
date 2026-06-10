@@ -151,6 +151,7 @@ const CACHE = {
 const STUDIO_ID_BY_NAME_CACHE = new Map();
 const STUDIO_IDS_BY_NAME_CACHE = new Map();
 const STUDIO_MEDIA_COUNTS_CACHE = new Map();
+const STUDIO_MODAL_ITEMS_CACHE = new Map();
 const DEBUG_STATE = {
   lastRender: [],
   lastAt: 0,
@@ -167,6 +168,9 @@ const FAST_RENDER_DELAY_MS = 40;
 const DEFAULT_RENDER_DELAY_MS = 120;
 const PLUGIN_DATA_CACHE_TTL_MS = 15 * 1000;
 const STUDIO_MODAL_LIMIT = 48;
+const STUDIO_MODAL_CACHE_TTL_MS = 60 * 1000;
+const STUDIO_INITIAL_HOVER_PRELOAD_COUNT = 5;
+const STUDIO_MAX_INITIAL_HOVER_PRELOAD_COUNT = 24;
 let busy = false;
 let scheduleTimer = null;
 let lastRenderAt = 0;
@@ -177,6 +181,7 @@ let homeVisibleLastTick = false;
 let homeVisitId = 0;
 let randomOrderCache = { visitId: 0, key: "", order: [] };
 const BOOT_GUARD_KEY = "__studioHubsBooted";
+let hoverVideoObserver = null;
 
 function ensureCss() {
   if (document.getElementById("studiohubs-css")) return;
@@ -191,8 +196,11 @@ function getCfgFromLocalStorage() {
   const enabled = localStorage.getItem("studiohubs.enabled");
   const hoverVideo = localStorage.getItem("studiohubs.hoverVideo");
   const randomOrder = localStorage.getItem("studiohubs.randomOrder");
+  const initialHoverPreloadCount = localStorage.getItem("studiohubs.initialHoverPreloadCount");
   const placeAfter = String(localStorage.getItem("studiohubs.placeAfter") || "").trim();
   const placeBefore = String(localStorage.getItem("studiohubs.placeBefore") || "").trim();
+
+  const parsedInitialHoverPreloadCount = Number.parseInt(String(initialHoverPreloadCount || STUDIO_INITIAL_HOVER_PRELOAD_COUNT), 10);
 
   return {
     enablePlugin: true,
@@ -200,6 +208,9 @@ function getCfgFromLocalStorage() {
     enabled: enabled == null ? true : enabled !== "false",
     hoverVideo: hoverVideo == null ? true : hoverVideo !== "false",
     randomOrder: randomOrder === "true",
+    initialHoverPreloadCount: Number.isFinite(parsedInitialHoverPreloadCount)
+      ? Math.max(0, Math.min(STUDIO_MAX_INITIAL_HOVER_PRELOAD_COUNT, parsedInitialHoverPreloadCount))
+      : STUDIO_INITIAL_HOVER_PRELOAD_COUNT,
     placeAfter,
     placeBefore,
   };
@@ -232,6 +243,10 @@ async function getCfg() {
       enabled: readCfg("enableStudioHubs", "EnableStudioHubs", true) !== false,
       hoverVideo: readCfg("studioHubsHoverVideo", "StudioHubsHoverVideo", fallback.hoverVideo) !== false,
       randomOrder: readCfg("studioHubsRandomOrder", "StudioHubsRandomOrder", fallback.randomOrder) === true,
+      initialHoverPreloadCount: Math.max(0, Math.min(
+        STUDIO_MAX_INITIAL_HOVER_PRELOAD_COUNT,
+        Number.parseInt(String(readCfg("studioHubsInitialHoverPreloadCount", "StudioHubsInitialHoverPreloadCount", fallback.initialHoverPreloadCount)), 10) || 0
+      )),
       placeAfter: String(readCfg("studioHubsPlaceAfter", "StudioHubsPlaceAfter", fallback.placeAfter || "")).trim(),
       placeBefore: String(readCfg("studioHubsPlaceBefore", "StudioHubsPlaceBefore", fallback.placeBefore || "")).trim(),
       studioHubsStudioOrder: Array.isArray(readCfg("studioHubsStudioOrder", "StudioHubsStudioOrder", [])) ? readCfg("studioHubsStudioOrder", "StudioHubsStudioOrder", []) : [],
@@ -1158,6 +1173,12 @@ async function fetchStudioItemsByTypes(userId, studioIds, includeItemTypes) {
   const ids = Array.from(new Set((studioIds || []).map((x) => String(x || "").trim()).filter(Boolean)));
   if (!userId || !ids.length) return [];
 
+  const cacheKey = getStudioModalCacheKey(userId, ids, includeItemTypes);
+  const cached = STUDIO_MODAL_ITEMS_CACHE.get(cacheKey);
+  if (cached && (Date.now() - cached.ts) < STUDIO_MODAL_CACHE_TTL_MS) {
+    return cached.promise;
+  }
+
   const qs = new URLSearchParams({
     StartIndex: "0",
     Limit: String(STUDIO_MODAL_LIMIT),
@@ -1169,8 +1190,19 @@ async function fetchStudioItemsByTypes(userId, studioIds, includeItemTypes) {
     StudioIds: ids.join(","),
   });
 
-  const payload = await fetchJson(`/Users/${encodeURIComponent(userId)}/Items?${qs.toString()}`);
-  return Array.isArray(payload?.Items) ? payload.Items : [];
+  const request = fetchJson(`/Users/${encodeURIComponent(userId)}/Items?${qs.toString()}`)
+    .then((payload) => Array.isArray(payload?.Items) ? payload.Items : [])
+    .catch((err) => {
+      STUDIO_MODAL_ITEMS_CACHE.delete(cacheKey);
+      throw err;
+    });
+
+  STUDIO_MODAL_ITEMS_CACHE.set(cacheKey, {
+    ts: Date.now(),
+    promise: request,
+  });
+
+  return request;
 }
 
 function renderStudioModalGrid(gridEl, items, emptyText) {
@@ -1234,19 +1266,7 @@ async function openStudioSectionsModal(name, studioId, studioIds = []) {
   modal.root.classList.add("is-open");
   document.body.classList.add("studio-hubs-modal-open");
 
-  const seedIds = Array.from(new Set([
-    String(studioId || "").trim(),
-    ...(Array.isArray(studioIds) ? studioIds : []).map((x) => String(x || "").trim()),
-  ].filter(Boolean)));
-
-  // Always merge name-resolved aliases so split studio IDs can cover both Movies and TV.
-  const resolvedByName = await resolveStudioIdsByName(title).catch(() => ({ studioIds: [] }));
-  let resolvedIds = Array.from(new Set([
-    ...seedIds,
-    ...(Array.isArray(resolvedByName?.studioIds) ? resolvedByName.studioIds : [])
-      .map((x) => String(x || "").trim())
-      .filter(Boolean),
-  ]));
+  const resolvedIds = await resolveStudioSectionIds(title, studioId, studioIds);
 
   if (!resolvedIds.length) {
     renderStudioModalGrid(modal.moviesGrid, [], "No movies found for this studio.");
@@ -1268,6 +1288,90 @@ async function openStudioSectionsModal(name, studioId, studioIds = []) {
 
   renderStudioModalGrid(modal.moviesGrid, movies, "No movies found for this studio.");
   renderStudioModalGrid(modal.seriesGrid, series, "No TV shows found for this studio.");
+}
+
+async function resolveStudioSectionIds(name, studioId, studioIds = []) {
+  const seedIds = Array.from(new Set([
+    String(studioId || "").trim(),
+    ...(Array.isArray(studioIds) ? studioIds : []).map((x) => String(x || "").trim()),
+  ].filter(Boolean)));
+
+  const resolvedByName = await resolveStudioIdsByName(name).catch(() => ({ studioIds: [] }));
+  return Array.from(new Set([
+    ...seedIds,
+    ...(Array.isArray(resolvedByName?.studioIds) ? resolvedByName.studioIds : [])
+      .map((x) => String(x || "").trim())
+      .filter(Boolean),
+  ]));
+}
+
+function getStudioModalCacheKey(userId, studioIds, includeItemTypes) {
+  const ids = Array.from(new Set((studioIds || []).map((x) => String(x || "").trim()).filter(Boolean))).sort();
+  return `${String(userId || "").trim()}:${String(includeItemTypes || "").trim()}:${ids.join(",")}`;
+}
+
+function primeHoverVideo(video) {
+  if (!video || video.dataset.prewarmed === "1") return;
+  video.dataset.prewarmed = "1";
+  try {
+    video.preload = "auto";
+    video.load();
+  } catch {
+    // ignore preload failures and let hover playback retry
+  }
+}
+
+function getHoverVideoObserver() {
+  if (hoverVideoObserver || typeof IntersectionObserver !== "function") {
+    return hoverVideoObserver;
+  }
+
+  hoverVideoObserver = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      const video = entry.target.querySelector(".studio-hub-video");
+      primeHoverVideo(video);
+      hoverVideoObserver.unobserve(entry.target);
+    }
+  }, {
+    rootMargin: "160px",
+    threshold: 0.2,
+  });
+
+  return hoverVideoObserver;
+}
+
+function observeHoverVideo(card, video) {
+  if (!card || !video) return;
+  const observer = getHoverVideoObserver();
+  if (observer) {
+    observer.observe(card);
+    return;
+  }
+
+  setTimeout(() => primeHoverVideo(video), 0);
+}
+
+function preloadInitialHoverVideos(row, count = STUDIO_INITIAL_HOVER_PRELOAD_COUNT) {
+  if (!row || count <= 0) return;
+
+  const videos = Array.from(row.querySelectorAll(".studio-hub-video")).slice(0, count);
+  for (const video of videos) {
+    primeHoverVideo(video);
+  }
+}
+
+async function prefetchStudioSections(name, studioId, studioIds = []) {
+  const userId = await getCurrentUserIdSafe().catch(() => "");
+  if (!userId) return;
+
+  const resolvedIds = await resolveStudioSectionIds(name, studioId, studioIds);
+  if (!resolvedIds.length) return;
+
+  await Promise.all([
+    fetchStudioItemsByTypes(userId, resolvedIds, "Movie").catch(() => []),
+    fetchStudioItemsByTypes(userId, resolvedIds, "Series").catch(() => []),
+  ]);
 }
 
 function createCard(name, studioId, logoUrl, backdropUrl, videoUrl, studioIds = []) {
@@ -1298,8 +1402,10 @@ function createCard(name, studioId, logoUrl, backdropUrl, videoUrl, studioIds = 
     video.preload = "none";
     video.src = videoUrl;
     a.appendChild(video);
+    observeHoverVideo(a, video);
 
     a.addEventListener("mouseenter", () => {
+      primeHoverVideo(video);
       video.currentTime = 0;
       video.play().catch(() => {});
       video.classList.add("on");
@@ -1309,6 +1415,17 @@ function createCard(name, studioId, logoUrl, backdropUrl, videoUrl, studioIds = 
       video.classList.remove("on");
     });
   }
+
+  let sectionsPrefetched = false;
+  const warmSections = () => {
+    if (sectionsPrefetched) return;
+    sectionsPrefetched = true;
+    void prefetchStudioSections(name, studioId, studioIds);
+  };
+
+  a.addEventListener("mouseenter", warmSections);
+  a.addEventListener("focusin", warmSections);
+  a.addEventListener("touchstart", warmSections, { passive: true, once: true });
 
   a.addEventListener("click", (ev) => {
     if (ev.defaultPrevented) return;
@@ -1583,6 +1700,14 @@ async function renderStudioHubs(force = false) {
       return;
     }
 
+    const initialHoverPreloadCount = Math.max(
+      0,
+      Math.min(
+        STUDIO_MAX_INITIAL_HOVER_PRELOAD_COUNT,
+        Number.parseInt(String(cfg?.initialHoverPreloadCount ?? STUDIO_INITIAL_HOVER_PRELOAD_COUNT), 10) || 0
+      )
+    );
+
     lastRenderSignature = signature;
     row.innerHTML = "";
 
@@ -1596,6 +1721,8 @@ async function renderStudioHubs(force = false) {
         cardModel.studioIds,
       ));
     }
+
+    preloadInitialHoverVideos(row, initialHoverPreloadCount);
 
     // Resolve unknown studio IDs after first paint so Home does not wait on many /Studios lookups.
     void resolvePendingCardLinks(row);
