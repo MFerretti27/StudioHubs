@@ -108,6 +108,6 @@ This project is licensed under the MIT License – see the [LICENSE](LICENSE) fi
 ## Support
 
 - **Issues:** [GitHub Issues](../../issues)
-- **Discussions:** [GitHub Discussions](../../discussions)
+- **Other Amazing Plugins:** [Awesome Jellyfin Repo](https://github.com/awesome-jellyfin/awesome-jellyfin/blob/main/README.md)
 - **Jellyfin Community:** [Official Jellyfin Forums](https://forum.jellyfin.org/)
 
