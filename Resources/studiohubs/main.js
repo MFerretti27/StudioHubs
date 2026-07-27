@@ -850,10 +850,7 @@ async function resolveStudioIdsByName(name) {
       }))
       .sort((a, b) => b.score - a.score);
 
-    const strongest = scored[0]?.score || 0;
-    const candidates = scored
-      .filter((entry) => entry.score >= Math.max(0, strongest - 3))
-      .slice(0, 8);
+    const candidates = scored.slice(0, 24);
 
     let chosen = candidates[0]?.studio || null;
     let chosenScore = Number(candidates[0]?.score || 0);
@@ -894,8 +891,9 @@ async function resolveStudioIdsByName(name) {
         const candidateId = String(candidate?.studio?.Id || "").trim();
         if (!candidateId || approvedIds.includes(candidateId)) continue;
 
-        const confidenceGate = Number(candidate?.score || 0) >= Math.max(6, chosenScore - 1);
-        if (!confidenceGate) continue;
+        const canonicalAliasMatch =
+          normalizeName(toCanonicalStudioName(candidate?.studio?.Name || "")) ===
+          normalizeName(canonical || name);
 
         const hasMovies = Number(candidate?.movieCount || 0) > 0;
         const hasSeries = Number(candidate?.seriesCount || 0) > 0;
@@ -903,13 +901,13 @@ async function resolveStudioIdsByName(name) {
 
         const addsMissingType = (!coveredMovies && hasMovies) || (!coveredSeries && hasSeries);
         const salvageCase = !coveredMovies && !coveredSeries;
-        if (!addsMissingType && !salvageCase) continue;
+        if (!canonicalAliasMatch && !addsMissingType && !salvageCase) continue;
 
         approvedIds.push(candidateId);
         coveredMovies = coveredMovies || hasMovies;
         coveredSeries = coveredSeries || hasSeries;
 
-        if (coveredMovies && coveredSeries) break;
+        if (approvedIds.length >= 8) break;
       }
 
       if (!approvedIds.length) {
