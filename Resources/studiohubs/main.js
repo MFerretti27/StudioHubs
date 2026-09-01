@@ -151,10 +151,12 @@ const CACHE = {
 const STUDIO_ID_BY_NAME_CACHE = new Map();
 const STUDIO_IDS_BY_NAME_CACHE = new Map();
 const STUDIO_MEDIA_COUNTS_CACHE = new Map();
+const STUDIO_MODAL_ITEMS_CACHE = new Map();
 const DEBUG_STATE = {
   lastRender: [],
   lastAt: 0,
 };
+let studioModalRequestSeq = 0;
 
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const EMPTY_STUDIOS_RETRY_MS = 45 * 1000;
@@ -165,8 +167,13 @@ const NO_CARDS_RETRY_DELAY_MS = 20 * 1000;
 const MIN_RENDER_INTERVAL_MS = 900;
 const FAST_RENDER_DELAY_MS = 40;
 const DEFAULT_RENDER_DELAY_MS = 120;
+const MAIN_SCREEN_DEFER_MS = 1200;
+const MAIN_SCREEN_IDLE_TIMEOUT_MS = 2200;
 const PLUGIN_DATA_CACHE_TTL_MS = 15 * 1000;
 const STUDIO_MODAL_LIMIT = 48;
+const STUDIO_MODAL_CACHE_TTL_MS = 60 * 1000;
+const STUDIO_INITIAL_HOVER_PRELOAD_COUNT = 5;
+const STUDIO_MAX_INITIAL_HOVER_PRELOAD_COUNT = 24;
 let busy = false;
 let scheduleTimer = null;
 let lastRenderAt = 0;
@@ -177,6 +184,7 @@ let homeVisibleLastTick = false;
 let homeVisitId = 0;
 let randomOrderCache = { visitId: 0, key: "", order: [] };
 const BOOT_GUARD_KEY = "__studioHubsBooted";
+let hoverVideoObserver = null;
 
 function ensureCss() {
   if (document.getElementById("studiohubs-css")) return;
@@ -191,8 +199,11 @@ function getCfgFromLocalStorage() {
   const enabled = localStorage.getItem("studiohubs.enabled");
   const hoverVideo = localStorage.getItem("studiohubs.hoverVideo");
   const randomOrder = localStorage.getItem("studiohubs.randomOrder");
+  const initialHoverPreloadCount = localStorage.getItem("studiohubs.initialHoverPreloadCount");
   const placeAfter = String(localStorage.getItem("studiohubs.placeAfter") || "").trim();
   const placeBefore = String(localStorage.getItem("studiohubs.placeBefore") || "").trim();
+
+  const parsedInitialHoverPreloadCount = Number.parseInt(String(initialHoverPreloadCount || STUDIO_INITIAL_HOVER_PRELOAD_COUNT), 10);
 
   return {
     enablePlugin: true,
@@ -200,6 +211,9 @@ function getCfgFromLocalStorage() {
     enabled: enabled == null ? true : enabled !== "false",
     hoverVideo: hoverVideo == null ? true : hoverVideo !== "false",
     randomOrder: randomOrder === "true",
+    initialHoverPreloadCount: Number.isFinite(parsedInitialHoverPreloadCount)
+      ? Math.max(0, Math.min(STUDIO_MAX_INITIAL_HOVER_PRELOAD_COUNT, parsedInitialHoverPreloadCount))
+      : STUDIO_INITIAL_HOVER_PRELOAD_COUNT,
     placeAfter,
     placeBefore,
   };
@@ -232,6 +246,10 @@ async function getCfg() {
       enabled: readCfg("enableStudioHubs", "EnableStudioHubs", true) !== false,
       hoverVideo: readCfg("studioHubsHoverVideo", "StudioHubsHoverVideo", fallback.hoverVideo) !== false,
       randomOrder: readCfg("studioHubsRandomOrder", "StudioHubsRandomOrder", fallback.randomOrder) === true,
+      initialHoverPreloadCount: Math.max(0, Math.min(
+        STUDIO_MAX_INITIAL_HOVER_PRELOAD_COUNT,
+        Number.parseInt(String(readCfg("studioHubsInitialHoverPreloadCount", "StudioHubsInitialHoverPreloadCount", fallback.initialHoverPreloadCount)), 10) || 0
+      )),
       placeAfter: String(readCfg("studioHubsPlaceAfter", "StudioHubsPlaceAfter", fallback.placeAfter || "")).trim(),
       placeBefore: String(readCfg("studioHubsPlaceBefore", "StudioHubsPlaceBefore", fallback.placeBefore || "")).trim(),
       studioHubsStudioOrder: Array.isArray(readCfg("studioHubsStudioOrder", "StudioHubsStudioOrder", [])) ? readCfg("studioHubsStudioOrder", "StudioHubsStudioOrder", []) : [],
@@ -835,72 +853,20 @@ async function resolveStudioIdsByName(name) {
       }))
       .sort((a, b) => b.score - a.score);
 
-    const strongest = scored[0]?.score || 0;
-    const candidates = scored
-      .filter((entry) => entry.score >= Math.max(0, strongest - 3))
-      .slice(0, 8);
-
-    let chosen = candidates[0]?.studio || null;
-    let chosenScore = Number(candidates[0]?.score || 0);
+    let chosen = scored[0]?.studio || null;
     let approvedIds = [];
-    const userIdForCounts = await getCurrentUserIdSafe().catch(() => "");
-    if (userIdForCounts && candidates.length > 1) {
-      const enriched = await Promise.all(candidates.map(async ({ studio, score }) => {
-        const id = String(studio?.Id || "").trim();
-        const movieCount = id ? await fetchStudioTypeCount(userIdForCounts, id, "Movie") : 0;
-        const seriesCount = id ? await fetchStudioTypeCount(userIdForCounts, id, "Series") : 0;
-        return {
-          studio,
-          score,
-          movieCount,
-          seriesCount,
-        };
-      }));
+    const canonicalTarget = normalizeName(canonical || name);
+    const aliasMatches = scored.filter(({ studio }) => {
+      const studioCanonical = normalizeName(toCanonicalStudioName(studio?.Name || ""));
+      return !!studioCanonical && studioCanonical === canonicalTarget;
+    });
 
-      enriched.sort((a, b) => {
-        if (b.movieCount !== a.movieCount) return b.movieCount - a.movieCount;
-        if (b.score !== a.score) return b.score - a.score;
-        if (b.seriesCount !== a.seriesCount) return b.seriesCount - a.seriesCount;
-        return String(a.studio?.Name || "").localeCompare(String(b.studio?.Name || ""));
-      });
-
-      const primary = enriched[0] || null;
-      chosen = primary?.studio || chosen;
-      chosenScore = Number(primary?.score || chosenScore || 0);
-
-      let coveredMovies = Number(primary?.movieCount || 0) > 0;
-      let coveredSeries = Number(primary?.seriesCount || 0) > 0;
-
-      if (primary?.studio?.Id) {
-        approvedIds.push(String(primary.studio.Id).trim());
-      }
-
-      for (const candidate of enriched.slice(1)) {
-        const candidateId = String(candidate?.studio?.Id || "").trim();
-        if (!candidateId || approvedIds.includes(candidateId)) continue;
-
-        const confidenceGate = Number(candidate?.score || 0) >= Math.max(6, chosenScore - 1);
-        if (!confidenceGate) continue;
-
-        const hasMovies = Number(candidate?.movieCount || 0) > 0;
-        const hasSeries = Number(candidate?.seriesCount || 0) > 0;
-        if (!hasMovies && !hasSeries) continue;
-
-        const addsMissingType = (!coveredMovies && hasMovies) || (!coveredSeries && hasSeries);
-        const salvageCase = !coveredMovies && !coveredSeries;
-        if (!addsMissingType && !salvageCase) continue;
-
-        approvedIds.push(candidateId);
-        coveredMovies = coveredMovies || hasMovies;
-        coveredSeries = coveredSeries || hasSeries;
-
-        if (coveredMovies && coveredSeries) break;
-      }
-
-      if (!approvedIds.length) {
-        const fallbackPrimaryId = String(primary?.studio?.Id || "").trim();
-        if (fallbackPrimaryId) approvedIds = [fallbackPrimaryId];
-      }
+    // Prefer canonical alias coverage without additional per-candidate media count requests.
+    if (aliasMatches.length) {
+      chosen = aliasMatches[0]?.studio || chosen;
+      approvedIds = aliasMatches
+        .map(({ studio }) => String(studio?.Id || "").trim())
+        .filter(Boolean);
     }
 
     const lookup = buildStudioLookup(allItems);
@@ -911,7 +877,7 @@ async function resolveStudioIdsByName(name) {
       approvedIds = [id];
     }
 
-    const uniqueApprovedIds = Array.from(new Set(approvedIds.filter(Boolean))).slice(0, 4);
+    const uniqueApprovedIds = Array.from(new Set(approvedIds.filter(Boolean)));
     STUDIO_ID_BY_NAME_CACHE.set(key, id);
     STUDIO_IDS_BY_NAME_CACHE.set(key, uniqueApprovedIds);
     return {
@@ -1158,6 +1124,12 @@ async function fetchStudioItemsByTypes(userId, studioIds, includeItemTypes) {
   const ids = Array.from(new Set((studioIds || []).map((x) => String(x || "").trim()).filter(Boolean)));
   if (!userId || !ids.length) return [];
 
+  const cacheKey = getStudioModalCacheKey(userId, ids, includeItemTypes);
+  const cached = STUDIO_MODAL_ITEMS_CACHE.get(cacheKey);
+  if (cached && (Date.now() - cached.ts) < STUDIO_MODAL_CACHE_TTL_MS) {
+    return cached.promise;
+  }
+
   const qs = new URLSearchParams({
     StartIndex: "0",
     Limit: String(STUDIO_MODAL_LIMIT),
@@ -1169,8 +1141,86 @@ async function fetchStudioItemsByTypes(userId, studioIds, includeItemTypes) {
     StudioIds: ids.join(","),
   });
 
-  const payload = await fetchJson(`/Users/${encodeURIComponent(userId)}/Items?${qs.toString()}`);
-  return Array.isArray(payload?.Items) ? payload.Items : [];
+  const request = fetchJson(`/Users/${encodeURIComponent(userId)}/Items?${qs.toString()}`)
+    .then((payload) => Array.isArray(payload?.Items) ? payload.Items : [])
+    .catch((err) => {
+      STUDIO_MODAL_ITEMS_CACHE.delete(cacheKey);
+      throw err;
+    });
+
+  STUDIO_MODAL_ITEMS_CACHE.set(cacheKey, {
+    ts: Date.now(),
+    promise: request,
+  });
+
+  return request;
+}
+
+async function fetchStudioItemsByTypesViaAliases(userId, studioName, includeItemTypes) {
+  if (!userId) return [];
+
+  const canonicalTarget = normalizeName(toCanonicalStudioName(studioName));
+  const terms = getStudioSearchTerms(studioName);
+  if (!canonicalTarget || !terms.length) return [];
+
+  const payloads = await Promise.all(terms.map(async (term) => {
+    const qs = new URLSearchParams({
+      StartIndex: "0",
+      Limit: "120",
+      Recursive: "true",
+      IncludeItemTypes: includeItemTypes,
+      SortBy: "DateCreated,SortName",
+      SortOrder: "Descending",
+      Fields: "ImageTags,PrimaryImageAspectRatio,ProductionYear,CommunityRating,Studios",
+      SearchTerm: term,
+    });
+
+    return fetchJson(`/Users/${encodeURIComponent(userId)}/Items?${qs.toString()}`)
+      .catch(() => ({ Items: [] }));
+  }));
+
+  const out = [];
+  const seen = new Set();
+  const aliasMatchSet = new Set(terms.map((term) => normalizeName(term)).filter(Boolean));
+
+  for (const payload of payloads) {
+    const items = Array.isArray(payload?.Items) ? payload.Items : [];
+    for (const item of items) {
+      const itemId = String(item?.Id || "").trim();
+      if (!itemId || seen.has(itemId)) continue;
+
+      const studioMatch = Array.isArray(item?.Studios) && item.Studios.some((studio) => {
+        const studioRaw = normalizeName(studio?.Name || "");
+        const studioCanonical = normalizeName(toCanonicalStudioName(studio?.Name || ""));
+        return (
+          (!!studioRaw && aliasMatchSet.has(studioRaw)) ||
+          (!!studioCanonical && studioCanonical === canonicalTarget)
+        );
+      });
+
+      if (!studioMatch) continue;
+      seen.add(itemId);
+      out.push(item);
+      if (out.length >= STUDIO_MODAL_LIMIT) return out;
+    }
+  }
+
+  return out;
+}
+
+function mergeUniqueItemsById(primaryItems, secondaryItems) {
+  const out = [];
+  const seen = new Set();
+
+  for (const item of [...(primaryItems || []), ...(secondaryItems || [])]) {
+    const id = String(item?.Id || "").trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(item);
+    if (out.length >= STUDIO_MODAL_LIMIT) break;
+  }
+
+  return out;
 }
 
 function renderStudioModalGrid(gridEl, items, emptyText) {
@@ -1223,6 +1273,8 @@ function renderStudioModalGrid(gridEl, items, emptyText) {
 async function openStudioSectionsModal(name, studioId, studioIds = []) {
   const modal = getStudioModalElements();
   if (!modal?.root || !modal.moviesGrid || !modal.seriesGrid) return;
+  const requestSeq = ++studioModalRequestSeq;
+  modal.root.dataset.requestSeq = String(requestSeq);
 
   const title = String(name || "Studio").trim() || "Studio";
   if (modal.title) {
@@ -1234,25 +1286,12 @@ async function openStudioSectionsModal(name, studioId, studioIds = []) {
   modal.root.classList.add("is-open");
   document.body.classList.add("studio-hubs-modal-open");
 
-  const seedIds = Array.from(new Set([
+  const seedIds = normalizeStudioIdList([
     String(studioId || "").trim(),
-    ...(Array.isArray(studioIds) ? studioIds : []).map((x) => String(x || "").trim()),
-  ].filter(Boolean)));
-
-  // Always merge name-resolved aliases so split studio IDs can cover both Movies and TV.
-  const resolvedByName = await resolveStudioIdsByName(title).catch(() => ({ studioIds: [] }));
-  let resolvedIds = Array.from(new Set([
-    ...seedIds,
-    ...(Array.isArray(resolvedByName?.studioIds) ? resolvedByName.studioIds : [])
-      .map((x) => String(x || "").trim())
-      .filter(Boolean),
-  ]));
-
-  if (!resolvedIds.length) {
-    renderStudioModalGrid(modal.moviesGrid, [], "No movies found for this studio.");
-    renderStudioModalGrid(modal.seriesGrid, [], "No TV shows found for this studio.");
-    return;
-  }
+    ...(Array.isArray(studioIds) ? studioIds : []),
+  ]);
+  const resolvedIdsPromise = resolveStudioSectionIds(title, studioId, studioIds)
+    .catch(() => []);
 
   const userId = await getCurrentUserIdSafe().catch(() => "");
   if (!userId) {
@@ -1261,13 +1300,178 @@ async function openStudioSectionsModal(name, studioId, studioIds = []) {
     return;
   }
 
-  const [movies, series] = await Promise.all([
+  const loadAndRender = async (ids) => {
+    const normalizedIds = normalizeStudioIdList(ids);
+    if (!normalizedIds.length) return [];
+
+    const isCurrentRequest = () => (
+      modal.root.classList.contains("is-open") &&
+      modal.root.dataset.requestSeq === String(requestSeq)
+    );
+
+    if (!isCurrentRequest()) return normalizedIds;
+
+    const moviesPromise = fetchStudioItemsByTypes(userId, normalizedIds, "Movie")
+      .catch(() => [])
+      .then(async (movies) => {
+        const baseMovies = Array.isArray(movies) ? movies : [];
+
+        // Render fast path first, then augment with alias matches.
+        if (baseMovies.length && isCurrentRequest()) {
+          renderStudioModalGrid(modal.moviesGrid, baseMovies, "No movies found for this studio.");
+        }
+
+        const aliasMovies = await fetchStudioItemsByTypesViaAliases(userId, title, "Movie").catch(() => []);
+        const mergedMovies = mergeUniqueItemsById(baseMovies, aliasMovies);
+
+        if (isCurrentRequest()) {
+          if (!baseMovies.length || mergedMovies.length !== baseMovies.length) {
+            renderStudioModalGrid(modal.moviesGrid, mergedMovies, "No movies found for this studio.");
+          }
+        }
+
+        return mergedMovies;
+      });
+
+    const seriesPromise = fetchStudioItemsByTypes(userId, normalizedIds, "Series")
+      .catch(() => [])
+      .then((series) => {
+        if (isCurrentRequest()) {
+          renderStudioModalGrid(modal.seriesGrid, series, "No TV shows found for this studio.");
+        }
+        return series;
+      });
+
+    await Promise.allSettled([moviesPromise, seriesPromise]);
+    return normalizedIds;
+  };
+
+  // Stage 1: render quickly from currently known IDs.
+  let displayedIds = [];
+  if (seedIds.length) {
+    displayedIds = await loadAndRender(seedIds);
+  }
+
+  // Stage 2: expand with alias-resolved IDs and refresh only if set changed.
+  const resolvedIds = normalizeStudioIdList(await resolvedIdsPromise);
+  if (!resolvedIds.length) {
+    if (!displayedIds.length) {
+      renderStudioModalGrid(modal.moviesGrid, [], "No movies found for this studio.");
+      renderStudioModalGrid(modal.seriesGrid, [], "No TV shows found for this studio.");
+    }
+    return;
+  }
+
+  if (!displayedIds.length || studioIdListKey(displayedIds) !== studioIdListKey(resolvedIds)) {
+    await loadAndRender(resolvedIds);
+  }
+}
+
+async function resolveStudioSectionIds(name, studioId, studioIds = []) {
+  const seedIds = Array.from(new Set([
+    String(studioId || "").trim(),
+    ...(Array.isArray(studioIds) ? studioIds : []).map((x) => String(x || "").trim()),
+  ].filter(Boolean)));
+
+  const resolvedByName = await resolveStudioIdsByName(name).catch(() => ({ studioIds: [] }));
+  return Array.from(new Set([
+    ...seedIds,
+    ...(Array.isArray(resolvedByName?.studioIds) ? resolvedByName.studioIds : [])
+      .map((x) => String(x || "").trim())
+      .filter(Boolean),
+  ]));
+}
+
+function getStudioModalCacheKey(userId, studioIds, includeItemTypes) {
+  const ids = Array.from(new Set((studioIds || []).map((x) => String(x || "").trim()).filter(Boolean))).sort();
+  return `${String(userId || "").trim()}:${String(includeItemTypes || "").trim()}:${ids.join(",")}`;
+}
+
+function normalizeStudioIdList(studioIds = []) {
+  return Array.from(new Set(
+    (Array.isArray(studioIds) ? studioIds : [studioIds])
+      .map((x) => String(x || "").trim())
+      .filter(Boolean)
+  ));
+}
+
+function studioIdListKey(studioIds = []) {
+  return normalizeStudioIdList(studioIds).sort().join(",");
+}
+
+function scheduleIdleWork(callback, timeout = 800) {
+  if (typeof callback !== "function") return;
+
+  if (typeof window.requestIdleCallback === "function") {
+    window.requestIdleCallback(() => callback(), { timeout });
+    return;
+  }
+
+  setTimeout(() => callback(), 0);
+}
+
+function primeHoverVideo(video) {
+  if (!video || video.dataset.prewarmed === "1") return;
+  video.dataset.prewarmed = "1";
+  try {
+    video.preload = "auto";
+    video.load();
+  } catch {
+    // ignore preload failures and let hover playback retry
+  }
+}
+
+function getHoverVideoObserver() {
+  if (hoverVideoObserver || typeof IntersectionObserver !== "function") {
+    return hoverVideoObserver;
+  }
+
+  hoverVideoObserver = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      const video = entry.target.querySelector(".studio-hub-video");
+      primeHoverVideo(video);
+      hoverVideoObserver.unobserve(entry.target);
+    }
+  }, {
+    rootMargin: "160px",
+    threshold: 0.2,
+  });
+
+  return hoverVideoObserver;
+}
+
+function observeHoverVideo(card, video) {
+  if (!card || !video) return;
+  const observer = getHoverVideoObserver();
+  if (observer) {
+    observer.observe(card);
+    return;
+  }
+
+  setTimeout(() => primeHoverVideo(video), 0);
+}
+
+function preloadInitialHoverVideos(row, count = STUDIO_INITIAL_HOVER_PRELOAD_COUNT) {
+  if (!row || count <= 0) return;
+
+  const videos = Array.from(row.querySelectorAll(".studio-hub-video")).slice(0, count);
+  for (const video of videos) {
+    primeHoverVideo(video);
+  }
+}
+
+async function prefetchStudioSections(name, studioId, studioIds = []) {
+  const userId = await getCurrentUserIdSafe().catch(() => "");
+  if (!userId) return;
+
+  const resolvedIds = await resolveStudioSectionIds(name, studioId, studioIds);
+  if (!resolvedIds.length) return;
+
+  await Promise.all([
     fetchStudioItemsByTypes(userId, resolvedIds, "Movie").catch(() => []),
     fetchStudioItemsByTypes(userId, resolvedIds, "Series").catch(() => []),
   ]);
-
-  renderStudioModalGrid(modal.moviesGrid, movies, "No movies found for this studio.");
-  renderStudioModalGrid(modal.seriesGrid, series, "No TV shows found for this studio.");
 }
 
 function createCard(name, studioId, logoUrl, backdropUrl, videoUrl, studioIds = []) {
@@ -1298,8 +1502,10 @@ function createCard(name, studioId, logoUrl, backdropUrl, videoUrl, studioIds = 
     video.preload = "none";
     video.src = videoUrl;
     a.appendChild(video);
+    observeHoverVideo(a, video);
 
     a.addEventListener("mouseenter", () => {
+      primeHoverVideo(video);
       video.currentTime = 0;
       video.play().catch(() => {});
       video.classList.add("on");
@@ -1583,6 +1789,14 @@ async function renderStudioHubs(force = false) {
       return;
     }
 
+    const initialHoverPreloadCount = Math.max(
+      0,
+      Math.min(
+        STUDIO_MAX_INITIAL_HOVER_PRELOAD_COUNT,
+        Number.parseInt(String(cfg?.initialHoverPreloadCount ?? STUDIO_INITIAL_HOVER_PRELOAD_COUNT), 10) || 0
+      )
+    );
+
     lastRenderSignature = signature;
     row.innerHTML = "";
 
@@ -1597,8 +1811,10 @@ async function renderStudioHubs(force = false) {
       ));
     }
 
-    // Resolve unknown studio IDs after first paint so Home does not wait on many /Studios lookups.
-    void resolvePendingCardLinks(row);
+    preloadInitialHoverVideos(row, initialHoverPreloadCount);
+
+    // Avoid expensive background ID enrichment during Home render.
+    // IDs are resolved lazily for the modal when the user interacts with a card.
     setupRowScroller(section, row);
 
     DEBUG_STATE.lastRender = renderDebug;
@@ -1659,16 +1875,27 @@ function scheduleRender(options = {}) {
   }, delayMs);
 }
 
+function scheduleRenderDeferred(options = {}) {
+  const force = options.force !== false;
+  scheduleIdleWork(() => {
+    scheduleRender({
+      force,
+      prepaint: false,
+      delayMs: Number.isFinite(options.delayMs) ? options.delayMs : MAIN_SCREEN_DEFER_MS,
+    });
+  }, MAIN_SCREEN_IDLE_TIMEOUT_MS);
+}
+
 function installLifecycleHooks() {
   const onNav = () => {
-    scheduleRender({ force: true, delayMs: FAST_RENDER_DELAY_MS });
+    scheduleRenderDeferred({ force: true });
     // Fallback: after a short delay, check if cards are missing and force another render if needed
     setTimeout(() => {
       const row = document.querySelector(".studio-hubs-row");
       if (row && !row.querySelector(".studio-hub-card") && !row.querySelector(".studio-hubs-empty")) {
-        scheduleRender({ force: true, delayMs: 0 });
+        scheduleRenderDeferred({ force: true, delayMs: 300 });
       }
-    }, 800);
+    }, MAIN_SCREEN_IDLE_TIMEOUT_MS);
   };
 
   // Jellyfin Web can navigate without a hard reload or hash change.
@@ -1730,9 +1957,11 @@ function boot() {
   };
 
   ensureCss();
-  scheduleRender({ force: true, delayMs: 0 });
+  scheduleRenderDeferred({ force: true });
   installLifecycleHooks();
-  window.addEventListener("jms:studio-hubs-visibility-updated", scheduleRender, { passive: true });
+  window.addEventListener("jms:studio-hubs-visibility-updated", () => {
+    scheduleRenderDeferred({ force: true });
+  }, { passive: true });
 }
 
 boot();
