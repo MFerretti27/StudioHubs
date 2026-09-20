@@ -9,7 +9,23 @@
   position: relative;
 }
 
+#studio-hubs .studio-hubs-native-scroller {
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  padding-inline: var(--studiohubs-inline-padding);
+}
+
+#studio-hubs .studio-hubs-native-scroller::-webkit-scrollbar {
+  display: none;
+}
+
 #studio-hubs .studio-hubs-row {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: stretch;
   gap: 12px;
 }
 

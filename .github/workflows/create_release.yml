@@ -102,7 +102,7 @@ jobs:
           fi
 
           manifest_target_abi="$(jq -r '.[0].versions[0].targetAbi // "10.11.0.0"' manifest.json)"
-          manifest_changelog="$(jq -r '.[0].versions[0].changelog // "Automated release"' manifest.json)"
+          manifest_changelog="Improvements and bug fixes. More info: [StudioHubs](https://github.com/MFerretti27/StudioHubs)"
 
           jq \
             --arg version "$PLUGIN_VERSION" \
@@ -184,7 +184,7 @@ jobs:
           fi
 
           manifest_target_abi="$(jq -r '.[0].versions[0].targetAbi // "10.11.0.0"' manifest.json)"
-          manifest_changelog="$(jq -r '.[0].versions[0].changelog // "Automated release"' manifest.json)"
+          manifest_changelog="Improvements and bug fixes. More info: [StudioHubs](https://github.com/MFerretti27/StudioHubs)"
 
           jq \
             --arg version "$PLUGIN_VERSION" \

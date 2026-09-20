@@ -24,7 +24,7 @@ const STUDIO_ALIASES = {
   "walt disney pictures": ["walt disney pictures", "walt disney animation studios", "walt disney studios motion pictures"],
   "disney+": ["disney plus", "disney+ originals", "disney plus originals"],
   "apple tv+": ["apple tv", "apple tv plus", "apple original", "apple originals", "apple tv+ originals", "apple studios"],
-  "dc": ["dc entertainment", "dc studios"],
+  "dc": ["dc entertainment", "dc studios", ],
   "fox": ["20th century fox", "20th century studios", "twentieth century fox", "twentieth century studios", "fox searchlight pictures", "searchlight pictures", "20th Century Fox"],
   "warner bros. pictures": ["warner bros", "warner bros.", "warner brothers"],
   "lucasfilm ltd.": ["lucasfilm", "lucasfilm ltd"],
@@ -353,6 +353,18 @@ function sectionTitleMatchesAnyKeyword(sectionEl, keywords) {
   return keywords.some((keyword) => keyword && title.includes(keyword));
 }
 
+// Inserting into the home container can synchronously upgrade sibling custom elements,
+// whose attached/detached callbacks may throw and abort our render.
+function safeInsert(root, section, referenceNode) {
+  try {
+    root.insertBefore(section, referenceNode);
+    return true;
+  } catch (err) {
+    console.error("[StudioHubs] insert failed:", err);
+    return section.parentElement === root;
+  }
+}
+
 function placeSection(root, section) {
   if (!root || !section) return;
 
@@ -364,26 +376,26 @@ function placeSection(root, section) {
   if (afterTarget && afterTarget.parentElement === root) {
     const next = afterTarget.nextElementSibling;
     if (next !== section) {
-      root.insertBefore(section, next);
+      safeInsert(root, section, next);
     }
     return;
   }
 
   if (beforeTarget && beforeTarget.parentElement === root && beforeTarget !== section) {
-    root.insertBefore(section, beforeTarget);
+    safeInsert(root, section, beforeTarget);
     return;
   }
 
   const firstChild = root.firstElementChild;
   if (!firstChild) {
     if (section.parentElement !== root) {
-      root.appendChild(section);
+      safeInsert(root, section, null);
     }
     return;
   }
 
   if (firstChild !== section) {
-    root.insertBefore(section, firstChild);
+    safeInsert(root, section, firstChild);
   }
 }
 
@@ -403,8 +415,8 @@ function ensureSection(root) {
       <div class="sectionTitleContainer sectionTitleContainer-cards">
         <h2 class="sectionTitle sectionTitle-cards">Studio Collections</h2>
       </div>
-      <div is="emby-scroller" class="studio-hubs-native-scroller padded-top-focusscale padded-bottom-focusscale" data-centerfocus="true">
-        <div is="emby-itemscontainer" class="itemsContainer scrollSlider focuscontainer-x animatedScrollX studio-hubs-row" data-monitor="videoplayback,markplayed" role="list"></div>
+      <div class="studio-hubs-native-scroller padded-top-focusscale padded-bottom-focusscale">
+        <div class="itemsContainer focuscontainer-x studio-hubs-row" role="list"></div>
       </div>
     `;
   }
@@ -419,14 +431,12 @@ function setupRowScroller(section, row) {
   let activeRow = row || section.querySelector(".studio-hubs-row, .hub-row, .itemsContainer.hub-row");
   if (!activeRow) return;
 
-  activeRow.classList.add("studio-hubs-row", "itemsContainer", "scrollSlider", "focuscontainer-x", "animatedScrollX");
+  activeRow.classList.add("studio-hubs-row", "itemsContainer", "focuscontainer-x");
 
   let nativeScroller = section.querySelector(".studio-hubs-native-scroller");
   if (!nativeScroller) {
     nativeScroller = document.createElement("div");
     nativeScroller.className = "studio-hubs-native-scroller padded-top-focusscale padded-bottom-focusscale";
-    nativeScroller.setAttribute("is", "emby-scroller");
-    nativeScroller.setAttribute("data-centerfocus", "true");
 
     const parent = activeRow.parentElement;
     if (parent) {
