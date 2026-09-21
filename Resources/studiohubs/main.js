@@ -169,12 +169,14 @@ const FAST_RENDER_DELAY_MS = 40;
 const DEFAULT_RENDER_DELAY_MS = 120;
 const MAIN_SCREEN_DEFER_MS = 1200;
 const MAIN_SCREEN_IDLE_TIMEOUT_MS = 2200;
+const HOME_CONTAINER_RETRY_MS = 250;
 const PLUGIN_DATA_CACHE_TTL_MS = 15 * 1000;
 const STUDIO_MODAL_LIMIT = 48;
 const STUDIO_MODAL_CACHE_TTL_MS = 60 * 1000;
 const STUDIO_INITIAL_HOVER_PRELOAD_COUNT = 5;
 const STUDIO_MAX_INITIAL_HOVER_PRELOAD_COUNT = 24;
 let busy = false;
+let renderRootRetryScheduled = false;
 let scheduleTimer = null;
 let lastRenderAt = 0;
 let visibilityFallbackUntil = 0;
@@ -1671,13 +1673,30 @@ function buildRenderSignature(entries, cfg) {
 
 async function renderStudioHubs(force = false) {
   tickHomeVisitState();
-  if (busy) return;
+  if (busy) {
+    console.debug("[StudioHubs] renderStudioHubs skipped: busy");
+    return;
+  }
   const now = Date.now();
-  if (!force && (now - lastRenderAt) < MIN_RENDER_INTERVAL_MS) return;
+  if (!force && (now - lastRenderAt) < MIN_RENDER_INTERVAL_MS) {
+    console.debug("[StudioHubs] renderStudioHubs skipped: throttled");
+    return;
+  }
   lastRenderAt = now;
 
   const root = getHomeContainer();
-  if (!root) return;
+  if (!root) {
+    // Home DOM may still be transitioning in (offsetParent/hide class not settled yet); retry shortly.
+    console.debug("[StudioHubs] renderStudioHubs: home container not found, scheduling retry", { force });
+    if (!force || (force && !renderRootRetryScheduled)) {
+      renderRootRetryScheduled = true;
+      setTimeout(() => {
+        renderRootRetryScheduled = false;
+        void renderStudioHubs(force);
+      }, HOME_CONTAINER_RETRY_MS);
+    }
+    return;
+  }
 
   busy = true;
   try {
@@ -1793,6 +1812,7 @@ async function renderStudioHubs(force = false) {
     const signature = buildRenderSignature(renderDebug, cfg);
     const hasExistingRowContent = !!row.querySelector(".studio-hub-card, .studio-hubs-empty");
     if (signature === lastRenderSignature && hasExistingRowContent) {
+      console.debug("[StudioHubs] renderStudioHubs skipped: signature unchanged and row already populated");
       DEBUG_STATE.lastRender = renderDebug;
       DEBUG_STATE.lastAt = Date.now();
       section.style.display = "";
@@ -1831,6 +1851,7 @@ async function renderStudioHubs(force = false) {
     DEBUG_STATE.lastAt = Date.now();
 
     if (!row.children.length) {
+      console.warn("[StudioHubs] renderStudioHubs produced zero cards", { mergedOrder, cardModels });
       ensureEmptyState(row, "No studio cards could be generated from current data.");
       setupRowScroller(section, row);
       setTimeout(scheduleRender, NO_CARDS_RETRY_DELAY_MS);
@@ -1902,7 +1923,9 @@ function installLifecycleHooks() {
     // Fallback: after a short delay, check if cards are missing and force another render if needed
     setTimeout(() => {
       const row = document.querySelector(".studio-hubs-row");
-      if (row && !row.querySelector(".studio-hub-card") && !row.querySelector(".studio-hubs-empty")) {
+      // Retry if the row is missing entirely (container wasn't ready yet) or still has no content.
+      if (!row || (!row.querySelector(".studio-hub-card") && !row.querySelector(".studio-hubs-empty"))) {
+        console.warn("[StudioHubs] onNav fallback: row missing/empty after idle timeout, forcing retry", { rowFound: !!row });
         scheduleRenderDeferred({ force: true, delayMs: 300 });
       }
     }, MAIN_SCREEN_IDLE_TIMEOUT_MS);
