@@ -27,15 +27,9 @@
         </div>
 
         <div class="inputContainer">
-          <label class="inputLabel" for="studioHubsPlaceAfter">Place after sections</label>
-          <input id="studioHubsPlaceAfter" type="text" class="emby-input" placeholder="continue watching" />
-          <div class="fieldDescription">Comma-separated section title fragments.</div>
-        </div>
-
-        <div class="inputContainer">
-          <label class="inputLabel" for="studioHubsPlaceBefore">Place before sections</label>
-          <input id="studioHubsPlaceBefore" type="text" class="emby-input" placeholder="recently added,latest,recent" />
-          <div class="fieldDescription">Comma-separated section title fragments.</div>
+          <label class="inputLabel" for="studioHubsPlaceBefore">Place before section</label>
+          <input id="studioHubsPlaceBefore" type="text" class="emby-input" placeholder="my media" />
+          <div class="fieldDescription">The title (or a fragment of it) of the Home section Studio Hubs should appear right before, e.g. "my media", "recently added", "latest movies", "next up".</div>
         </div>
 
         <div class="buttonContainer">
@@ -57,6 +51,28 @@
       </div>
 
       <div id="studiosStatus" class="fieldDescription studiohubs-status"></div>
+    </div>
+
+    <div class="studiohubs-card" style="margin-top: 24px;">
+      <h2>Linking a Movie or Show to a Studio</h2>
+      <p class="studiohubs-muted">
+        Studio Hubs groups your library by the "Studios" field on each item's metadata. If a movie
+        or show isn't showing up under the studio you expect, the easiest fix is:
+      </p>
+      <ol class="studiohubs-muted" style="padding-left: 20px; margin: 0;">
+        <li>Open the item in Jellyfin and click the pencil (Edit Metadata) icon.</li>
+        <li>Scroll to the <strong>Studios</strong> field.</li>
+        <li>
+          Add the studio's name exactly as it appears in the Studio Management list above (for
+          example, <code>Marvel Studios</code>, <code>Pixar</code>, or
+          <code>Warner Bros. Pictures</code>).
+        </li>
+        <li>Save the metadata change.</li>
+      </ol>
+      <p class="studiohubs-muted">
+        The item should appear on its studio's hub the next time Home refreshes (a page reload
+        forces this immediately).
+      </p>
     </div>
   </div>
 
@@ -224,14 +240,12 @@
         const hoverVideo = getCfgValue(cfg, "studioHubsHoverVideo", "StudioHubsHoverVideo", true);
         const randomOrder = getCfgValue(cfg, "studioHubsRandomOrder", "StudioHubsRandomOrder", false);
         const initialHoverPreloadCount = getCfgValue(cfg, "studioHubsInitialHoverPreloadCount", "StudioHubsInitialHoverPreloadCount", 5);
-        const placeAfter = getCfgValue(cfg, "studioHubsPlaceAfter", "StudioHubsPlaceAfter", "continue watching");
-        const placeBefore = getCfgValue(cfg, "studioHubsPlaceBefore", "StudioHubsPlaceBefore", "recently added,latest,recent");
+        const placeBefore = getCfgValue(cfg, "studioHubsPlaceBefore", "StudioHubsPlaceBefore", "my media");
 
         input("studioHubsHoverVideo").checked = hoverVideo !== false;
         input("studioHubsRandomOrder").checked = randomOrder === true;
         input("studioHubsInitialHoverPreloadCount").value = String(Number.isFinite(Number(initialHoverPreloadCount)) ? Math.max(0, Math.min(24, Number(initialHoverPreloadCount))) : 5);
-        input("studioHubsPlaceAfter").value = String(placeAfter || "continue watching");
-        input("studioHubsPlaceBefore").value = String(placeBefore || "recently added,latest,recent");
+        input("studioHubsPlaceBefore").value = String(placeBefore || "my media");
       }
 
       async function loadConfig() {
@@ -277,7 +291,6 @@
           studioHubsHoverVideo: input("studioHubsHoverVideo").checked,
           studioHubsRandomOrder: input("studioHubsRandomOrder").checked,
           studioHubsInitialHoverPreloadCount: preloadCount,
-          studioHubsPlaceAfter: String(input("studioHubsPlaceAfter").value || "").trim(),
           studioHubsPlaceBefore: String(input("studioHubsPlaceBefore").value || "").trim()
         };
 

@@ -206,7 +206,6 @@ function getCfgFromLocalStorage() {
   const hoverVideo = localStorage.getItem("studiohubs.hoverVideo");
   const randomOrder = localStorage.getItem("studiohubs.randomOrder");
   const initialHoverPreloadCount = localStorage.getItem("studiohubs.initialHoverPreloadCount");
-  const placeAfter = String(localStorage.getItem("studiohubs.placeAfter") || "").trim();
   const placeBefore = String(localStorage.getItem("studiohubs.placeBefore") || "").trim();
 
   const parsedInitialHoverPreloadCount = Number.parseInt(String(initialHoverPreloadCount || STUDIO_INITIAL_HOVER_PRELOAD_COUNT), 10);
@@ -220,7 +219,6 @@ function getCfgFromLocalStorage() {
     initialHoverPreloadCount: Number.isFinite(parsedInitialHoverPreloadCount)
       ? Math.max(0, Math.min(STUDIO_MAX_INITIAL_HOVER_PRELOAD_COUNT, parsedInitialHoverPreloadCount))
       : STUDIO_INITIAL_HOVER_PRELOAD_COUNT,
-    placeAfter,
     placeBefore,
   };
 }
@@ -256,7 +254,6 @@ async function getCfg() {
         STUDIO_MAX_INITIAL_HOVER_PRELOAD_COUNT,
         Number.parseInt(String(readCfg("studioHubsInitialHoverPreloadCount", "StudioHubsInitialHoverPreloadCount", fallback.initialHoverPreloadCount)), 10) || 0
       )),
-      placeAfter: String(readCfg("studioHubsPlaceAfter", "StudioHubsPlaceAfter", fallback.placeAfter || "")).trim(),
       placeBefore: String(readCfg("studioHubsPlaceBefore", "StudioHubsPlaceBefore", fallback.placeBefore || "")).trim(),
       studioHubsStudioOrder: Array.isArray(readCfg("studioHubsStudioOrder", "StudioHubsStudioOrder", [])) ? readCfg("studioHubsStudioOrder", "StudioHubsStudioOrder", []) : [],
       studioHubsEnabledStudios: Array.isArray(readCfg("studioHubsEnabledStudios", "StudioHubsEnabledStudios", [])) ? readCfg("studioHubsEnabledStudios", "StudioHubsEnabledStudios", []) : [],
@@ -333,30 +330,20 @@ function getSectionTitleText(sectionEl) {
   return normalizeSectionText(titleEl?.textContent || "");
 }
 
-function parseKeywordList(rawValue, fallbackList) {
-  const raw = String(rawValue || "").trim();
-  const values = raw
-    ? raw.split(",").map((v) => normalizeSectionText(v)).filter(Boolean)
-    : fallbackList;
-  return Array.from(new Set(values));
-}
-
 function getPlacementConfig() {
-  const defaultAfter = ["continue watching"];
-  const defaultBefore = ["recently added", "latest", "recent"];
-  const configuredAfter = String(CACHE.config?.placeAfter || "").trim();
+  const defaultBefore = "my media";
   const configuredBefore = String(CACHE.config?.placeBefore || "").trim();
+  const rawBefore = configuredBefore || localStorage.getItem("studiohubs.placeBefore") || defaultBefore;
 
   return {
-    afterKeywords: parseKeywordList(configuredAfter || localStorage.getItem("studiohubs.placeAfter"), defaultAfter),
-    beforeKeywords: parseKeywordList(configuredBefore || localStorage.getItem("studiohubs.placeBefore"), defaultBefore),
+    beforeKeyword: normalizeSectionText(rawBefore),
   };
 }
 
-function sectionTitleMatchesAnyKeyword(sectionEl, keywords) {
+function sectionTitleMatchesKeyword(sectionEl, keyword) {
+  if (!keyword) return false;
   const title = getSectionTitleText(sectionEl);
-  if (!title) return false;
-  return keywords.some((keyword) => keyword && title.includes(keyword));
+  return !!title && title.includes(keyword);
 }
 
 // Inserting into the home container can synchronously upgrade sibling custom elements,
@@ -375,17 +362,8 @@ function placeSection(root, section) {
   if (!root || !section) return;
 
   const children = Array.from(root.children).filter((el) => el !== section);
-  const { afterKeywords, beforeKeywords } = getPlacementConfig();
-  const afterTarget = children.find((el) => sectionTitleMatchesAnyKeyword(el, afterKeywords)) || null;
-  const beforeTarget = children.find((el) => sectionTitleMatchesAnyKeyword(el, beforeKeywords)) || null;
-
-  if (afterTarget && afterTarget.parentElement === root) {
-    const next = afterTarget.nextElementSibling;
-    if (next !== section) {
-      safeInsert(root, section, next);
-    }
-    return;
-  }
+  const { beforeKeyword } = getPlacementConfig();
+  const beforeTarget = children.find((el) => sectionTitleMatchesKeyword(el, beforeKeyword)) || null;
 
   if (beforeTarget && beforeTarget.parentElement === root && beforeTarget !== section) {
     safeInsert(root, section, beforeTarget);
