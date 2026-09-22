@@ -176,7 +176,11 @@ const STUDIO_MODAL_CACHE_TTL_MS = 60 * 1000;
 const STUDIO_INITIAL_HOVER_PRELOAD_COUNT = 5;
 const STUDIO_MAX_INITIAL_HOVER_PRELOAD_COUNT = 24;
 let busy = false;
+let busyWatchdogTimer = null;
+const RENDER_WATCHDOG_MS = 15000;
 let renderRootRetryScheduled = false;
+let renderRootRetryCount = 0;
+const MAX_HOME_CONTAINER_RETRIES = 40;
 let scheduleTimer = null;
 let lastRenderAt = 0;
 let visibilityFallbackUntil = 0;
@@ -418,7 +422,7 @@ function ensureSection(root) {
         <h2 class="sectionTitle sectionTitle-cards">Studio Collections</h2>
       </div>
       <div class="studio-hubs-native-scroller padded-top-focusscale padded-bottom-focusscale">
-        <div class="itemsContainer focuscontainer-x studio-hubs-row" role="list"></div>
+        <div class="studio-hubs-row" role="list"></div>
       </div>
     `;
   }
@@ -427,13 +431,30 @@ function ensureSection(root) {
   return section;
 }
 
+// Jellyfin's home hero/backdrop code calls .pause() on elements it finds inside the home
+// sections container, assuming they're real upgraded scroller/itemscontainer custom elements.
+// Removing the itemsContainer/focuscontainer-x classnames wasn't sufficient to avoid this, so
+// stub a harmless no-op .pause()/.play() on our own nodes to prevent the crash regardless of
+// whatever selector Jellyfin's code actually uses to find them.
+function shimMediaInterface(el) {
+  if (!el) return;
+  if (typeof el.pause !== "function") el.pause = () => {};
+  if (typeof el.play !== "function") el.play = () => Promise.resolve();
+}
+
 function setupRowScroller(section, row) {
   if (!section) return;
 
   let activeRow = row || section.querySelector(".studio-hubs-row, .hub-row, .itemsContainer.hub-row");
   if (!activeRow) return;
 
-  activeRow.classList.add("studio-hubs-row", "itemsContainer", "focuscontainer-x");
+  // Don't reuse Jellyfin's own itemsContainer/focuscontainer-x classnames here: their home
+  // hero/backdrop script appears to treat elements with those classes as real upgraded
+  // custom elements (calling e.g. .pause() on them), which this plain div doesn't implement.
+  activeRow.classList.add("studio-hubs-row");
+  activeRow.classList.remove("itemsContainer", "focuscontainer-x");
+  shimMediaInterface(section);
+  shimMediaInterface(activeRow);
 
   let nativeScroller = section.querySelector(".studio-hubs-native-scroller");
   if (!nativeScroller) {
@@ -450,10 +471,13 @@ function setupRowScroller(section, row) {
     }
   }
 
+  shimMediaInterface(nativeScroller);
+
   if (activeRow.parentElement !== nativeScroller) {
     nativeScroller.appendChild(activeRow);
   }
 }
+
 
 async function fetchJsonViaApiClient(url) {
   const client = window.ApiClient;
@@ -1496,12 +1520,14 @@ function createCard(name, studioId, logoUrl, backdropUrl, videoUrl, studioIds = 
   a.dataset.hrefSource = studioId ? "studioId" : "search";
   a.dataset.studioPending = studioId ? "0" : "1";
   a.setAttribute("aria-label", name);
+  shimMediaInterface(a);
 
   if (backdropUrl || logoUrl) {
     const img = document.createElement("img");
     img.className = logoUrl ? "studio-hub-img studio-hub-logo" : "studio-hub-img";
     img.src = logoUrl || backdropUrl;
     img.alt = name;
+    shimMediaInterface(img);
     a.appendChild(img);
   }
 
@@ -1602,10 +1628,11 @@ async function resolvePendingCardLinks(row) {
   }
 }
 
-function ensureEmptyState(row, message) {
+function ensureEmptyState(row, message, isLoading = false) {
   if (!row) return;
   const state = document.createElement("div");
   state.className = "studio-hubs-empty";
+  if (isLoading) state.dataset.loading = "1";
   state.textContent = message || "No studios available to display.";
   row.appendChild(state);
 }
@@ -1615,7 +1642,7 @@ function ensureLoadingState(row) {
   const hasCards = !!row.querySelector(".studio-hub-card");
   const hasState = !!row.querySelector(".studio-hubs-empty");
   if (hasCards || hasState) return;
-  ensureEmptyState(row, "Loading studios...");
+  ensureEmptyState(row, "Loading studios...", true);
 }
 
 function isHomeVisible() {
@@ -1686,10 +1713,18 @@ async function renderStudioHubs(force = false) {
 
   const root = getHomeContainer();
   if (!root) {
-    // Home DOM may still be transitioning in (offsetParent/hide class not settled yet); retry shortly.
-    console.debug("[StudioHubs] renderStudioHubs: home container not found, scheduling retry", { force });
+    // Don't gate this on isHomeVisible(): on a full page reload (e.g. browser back button),
+    // boot() can run before Jellyfin has mounted the home page DOM at all, so isHomeVisible()
+    // would be false even though home is about to mount. Rely on the retry cap instead so this
+    // can't loop forever while genuinely stuck on a non-home page.
+    if (renderRootRetryCount >= MAX_HOME_CONTAINER_RETRIES) {
+      renderRootRetryCount = 0;
+      return;
+    }
+    console.debug("[StudioHubs] renderStudioHubs: home container not found, scheduling retry", { force, attempt: renderRootRetryCount });
     if (!force || (force && !renderRootRetryScheduled)) {
       renderRootRetryScheduled = true;
+      renderRootRetryCount += 1;
       setTimeout(() => {
         renderRootRetryScheduled = false;
         void renderStudioHubs(force);
@@ -1697,8 +1732,17 @@ async function renderStudioHubs(force = false) {
     }
     return;
   }
+  renderRootRetryCount = 0;
 
   busy = true;
+  // If a render gets interrupted mid-await (e.g. a fetch that never resolves because the view
+  // was torn down by navigation), the finally block below would never run, permanently blocking
+  // all future renders. This watchdog guarantees busy can't get stuck forever.
+  clearTimeout(busyWatchdogTimer);
+  busyWatchdogTimer = setTimeout(() => {
+    console.warn("[StudioHubs] render watchdog: forcing busy=false after a stuck render");
+    busy = false;
+  }, RENDER_WATCHDOG_MS);
   try {
     const section = ensureSection(root);
     const row = section.querySelector(".studio-hubs-row");
@@ -1810,7 +1854,10 @@ async function renderStudioHubs(force = false) {
     }
 
     const signature = buildRenderSignature(renderDebug, cfg);
-    const hasExistingRowContent = !!row.querySelector(".studio-hub-card, .studio-hubs-empty");
+    // Only treat this as "already rendered" if real cards exist. The loading placeholder and the
+    // "no cards" empty state both use the studio-hubs-empty class, so including them here caused
+    // the loading placeholder to be mistaken for a completed render, permanently skipping re-render.
+    const hasExistingRowContent = !!row.querySelector(".studio-hub-card");
     if (signature === lastRenderSignature && hasExistingRowContent) {
       console.debug("[StudioHubs] renderStudioHubs skipped: signature unchanged and row already populated");
       DEBUG_STATE.lastRender = renderDebug;
@@ -1867,6 +1914,7 @@ async function renderStudioHubs(force = false) {
       ensureEmptyState(row, "An error occurred while rendering studios.");
     }
   } finally {
+    clearTimeout(busyWatchdogTimer);
     busy = false;
   }
 }
@@ -1920,11 +1968,15 @@ function scheduleRenderDeferred(options = {}) {
 function installLifecycleHooks() {
   const onNav = () => {
     scheduleRenderDeferred({ force: true });
-    // Fallback: after a short delay, check if cards are missing and force another render if needed
+    // Fallback: after a short delay, check if cards are missing and force another render if needed.
+    // Only applies while actually on home — otherwise this fires (and loops) on every unrelated page.
     setTimeout(() => {
+      if (!isHomeVisible()) return;
       const row = document.querySelector(".studio-hubs-row");
       // Retry if the row is missing entirely (container wasn't ready yet) or still has no content.
-      if (!row || (!row.querySelector(".studio-hub-card") && !row.querySelector(".studio-hubs-empty"))) {
+      // A loading placeholder doesn't count as "done" — only real cards or a final (non-loading) empty state do.
+      const hasFinalContent = !!row?.querySelector(".studio-hub-card, .studio-hubs-empty:not([data-loading])");
+      if (!row || !hasFinalContent) {
         console.warn("[StudioHubs] onNav fallback: row missing/empty after idle timeout, forcing retry", { rowFound: !!row });
         scheduleRenderDeferred({ force: true, delayMs: 300 });
       }
@@ -1957,6 +2009,28 @@ function installLifecycleHooks() {
   });
 }
 
+function snapshotHomeDomForDiagnostics() {
+  try {
+    const homeRoot = getHomeContainer();
+    const section = document.getElementById("studio-hubs");
+    const row = section?.querySelector(".studio-hubs-row") || null;
+    return {
+      homeVisible: isHomeVisible(),
+      homeChildCount: homeRoot ? homeRoot.children.length : null,
+      sectionIndex: homeRoot && section ? Array.from(homeRoot.children).indexOf(section) : -1,
+      sectionClassList: section ? Array.from(section.classList) : null,
+      rowClassList: row ? Array.from(row.classList) : null,
+      cardCount: row ? row.querySelectorAll(".studio-hub-card").length : 0,
+    };
+  } catch (err) {
+    return { snapshotError: String(err) };
+  }
+}
+
+// Jellyfin's own home-screen hero/backdrop code logs its render errors via console.error/window
+// "error" rather than throwing something we can catch directly. This was used while diagnosing
+// the pause() crash; now that it's fixed structurally via shimMediaInterface, only the manual
+// domSnapshot() debug helper below remains, without patching any global console/window behavior.
 function boot() {
   if (window[BOOT_GUARD_KEY]) return;
   window[BOOT_GUARD_KEY] = true;
@@ -1964,6 +2038,9 @@ function boot() {
   window.__studioHubsDebug = {
     dump() {
       return JSON.parse(JSON.stringify(DEBUG_STATE.lastRender || []));
+    },
+    domSnapshot() {
+      return snapshotHomeDomForDiagnostics();
     },
     unresolved() {
       return (DEBUG_STATE.lastRender || []).filter((x) => !String(x?.resolvedStudioId || "").trim());
