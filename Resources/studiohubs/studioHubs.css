@@ -75,6 +75,16 @@
   transform: scale(0.95);
 }
 
+/* MGM's source logo file is a square canvas (unlike other studios' wide/16:9 files), so
+   object-fit: contain letterboxes it and it renders noticeably smaller than the rest. */
+.studio-hub-logo[alt="MGM Studios"] {
+  transform: scale(1.35);
+}
+
+.studio-hub-card:hover .studio-hub-logo[alt="MGM Studios"] {
+  transform: scale(1.42);
+}
+
 .studio-hub-card:hover .studio-hub-img {
   transform: scale(1);
 }
