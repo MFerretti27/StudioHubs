@@ -59,8 +59,7 @@ Available settings:
 
 - Enable hover video
 - Randomize studio order on each Home visit
-- Place after sections (comma-separated title keywords)
-- Place before sections (comma-separated title keywords)
+- Place before section (title or fragment of the Home section Studio Hubs should appear before)
 
 Studio Management (global, admin-only):
 
@@ -72,14 +71,24 @@ Studio Management (global, admin-only):
 
 Placement resolution order:
 
-1. Place after first matching section title
-2. Else place before first matching section title
-3. Else fallback to top of Home sections
+1. Place before the first section whose title matches the configured keyword
+2. Else fallback to the top of Home sections
 
-Default placement intent:
+Default placement: before "My Media".
 
-- After Continue Watching
-- Before Recently Added
+## Linking a Movie or Show to a Studio
+
+Studio Hubs groups your library by the "Studios" field on each item's metadata. If a movie or
+show isn't showing up under the studio you expect:
+
+1. Open the item in Jellyfin and click the pencil (Edit Metadata) icon.
+2. Scroll to the **Studios** field.
+3. Add the studio's name exactly as it appears in the Studio Management list (for example,
+   `Marvel Studios`, `Pixar`, or `Warner Bros. Pictures`).
+4. Save the metadata change.
+
+The item should appear on its studio's hub the next time Home refreshes (a page reload forces
+this immediately).
 
 ## Random Order Behavior
 

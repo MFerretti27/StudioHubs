@@ -169,12 +169,18 @@ const FAST_RENDER_DELAY_MS = 40;
 const DEFAULT_RENDER_DELAY_MS = 120;
 const MAIN_SCREEN_DEFER_MS = 1200;
 const MAIN_SCREEN_IDLE_TIMEOUT_MS = 2200;
+const HOME_CONTAINER_RETRY_MS = 250;
 const PLUGIN_DATA_CACHE_TTL_MS = 15 * 1000;
 const STUDIO_MODAL_LIMIT = 48;
 const STUDIO_MODAL_CACHE_TTL_MS = 60 * 1000;
 const STUDIO_INITIAL_HOVER_PRELOAD_COUNT = 5;
 const STUDIO_MAX_INITIAL_HOVER_PRELOAD_COUNT = 24;
 let busy = false;
+let busyWatchdogTimer = null;
+const RENDER_WATCHDOG_MS = 15000;
+let renderRootRetryScheduled = false;
+let renderRootRetryCount = 0;
+const MAX_HOME_CONTAINER_RETRIES = 40;
 let scheduleTimer = null;
 let lastRenderAt = 0;
 let visibilityFallbackUntil = 0;
@@ -200,7 +206,6 @@ function getCfgFromLocalStorage() {
   const hoverVideo = localStorage.getItem("studiohubs.hoverVideo");
   const randomOrder = localStorage.getItem("studiohubs.randomOrder");
   const initialHoverPreloadCount = localStorage.getItem("studiohubs.initialHoverPreloadCount");
-  const placeAfter = String(localStorage.getItem("studiohubs.placeAfter") || "").trim();
   const placeBefore = String(localStorage.getItem("studiohubs.placeBefore") || "").trim();
 
   const parsedInitialHoverPreloadCount = Number.parseInt(String(initialHoverPreloadCount || STUDIO_INITIAL_HOVER_PRELOAD_COUNT), 10);
@@ -214,7 +219,6 @@ function getCfgFromLocalStorage() {
     initialHoverPreloadCount: Number.isFinite(parsedInitialHoverPreloadCount)
       ? Math.max(0, Math.min(STUDIO_MAX_INITIAL_HOVER_PRELOAD_COUNT, parsedInitialHoverPreloadCount))
       : STUDIO_INITIAL_HOVER_PRELOAD_COUNT,
-    placeAfter,
     placeBefore,
   };
 }
@@ -250,7 +254,6 @@ async function getCfg() {
         STUDIO_MAX_INITIAL_HOVER_PRELOAD_COUNT,
         Number.parseInt(String(readCfg("studioHubsInitialHoverPreloadCount", "StudioHubsInitialHoverPreloadCount", fallback.initialHoverPreloadCount)), 10) || 0
       )),
-      placeAfter: String(readCfg("studioHubsPlaceAfter", "StudioHubsPlaceAfter", fallback.placeAfter || "")).trim(),
       placeBefore: String(readCfg("studioHubsPlaceBefore", "StudioHubsPlaceBefore", fallback.placeBefore || "")).trim(),
       studioHubsStudioOrder: Array.isArray(readCfg("studioHubsStudioOrder", "StudioHubsStudioOrder", [])) ? readCfg("studioHubsStudioOrder", "StudioHubsStudioOrder", []) : [],
       studioHubsEnabledStudios: Array.isArray(readCfg("studioHubsEnabledStudios", "StudioHubsEnabledStudios", [])) ? readCfg("studioHubsEnabledStudios", "StudioHubsEnabledStudios", []) : [],
@@ -327,30 +330,20 @@ function getSectionTitleText(sectionEl) {
   return normalizeSectionText(titleEl?.textContent || "");
 }
 
-function parseKeywordList(rawValue, fallbackList) {
-  const raw = String(rawValue || "").trim();
-  const values = raw
-    ? raw.split(",").map((v) => normalizeSectionText(v)).filter(Boolean)
-    : fallbackList;
-  return Array.from(new Set(values));
-}
-
 function getPlacementConfig() {
-  const defaultAfter = ["continue watching"];
-  const defaultBefore = ["recently added", "latest", "recent"];
-  const configuredAfter = String(CACHE.config?.placeAfter || "").trim();
+  const defaultBefore = "my media";
   const configuredBefore = String(CACHE.config?.placeBefore || "").trim();
+  const rawBefore = configuredBefore || localStorage.getItem("studiohubs.placeBefore") || defaultBefore;
 
   return {
-    afterKeywords: parseKeywordList(configuredAfter || localStorage.getItem("studiohubs.placeAfter"), defaultAfter),
-    beforeKeywords: parseKeywordList(configuredBefore || localStorage.getItem("studiohubs.placeBefore"), defaultBefore),
+    beforeKeyword: normalizeSectionText(rawBefore),
   };
 }
 
-function sectionTitleMatchesAnyKeyword(sectionEl, keywords) {
+function sectionTitleMatchesKeyword(sectionEl, keyword) {
+  if (!keyword) return false;
   const title = getSectionTitleText(sectionEl);
-  if (!title) return false;
-  return keywords.some((keyword) => keyword && title.includes(keyword));
+  return !!title && title.includes(keyword);
 }
 
 // Inserting into the home container can synchronously upgrade sibling custom elements,
@@ -369,17 +362,8 @@ function placeSection(root, section) {
   if (!root || !section) return;
 
   const children = Array.from(root.children).filter((el) => el !== section);
-  const { afterKeywords, beforeKeywords } = getPlacementConfig();
-  const afterTarget = children.find((el) => sectionTitleMatchesAnyKeyword(el, afterKeywords)) || null;
-  const beforeTarget = children.find((el) => sectionTitleMatchesAnyKeyword(el, beforeKeywords)) || null;
-
-  if (afterTarget && afterTarget.parentElement === root) {
-    const next = afterTarget.nextElementSibling;
-    if (next !== section) {
-      safeInsert(root, section, next);
-    }
-    return;
-  }
+  const { beforeKeyword } = getPlacementConfig();
+  const beforeTarget = children.find((el) => sectionTitleMatchesKeyword(el, beforeKeyword)) || null;
 
   if (beforeTarget && beforeTarget.parentElement === root && beforeTarget !== section) {
     safeInsert(root, section, beforeTarget);
@@ -416,7 +400,7 @@ function ensureSection(root) {
         <h2 class="sectionTitle sectionTitle-cards">Studio Collections</h2>
       </div>
       <div class="studio-hubs-native-scroller padded-top-focusscale padded-bottom-focusscale">
-        <div class="itemsContainer focuscontainer-x studio-hubs-row" role="list"></div>
+        <div class="studio-hubs-row" role="list"></div>
       </div>
     `;
   }
@@ -425,13 +409,30 @@ function ensureSection(root) {
   return section;
 }
 
+// Jellyfin's home hero/backdrop code calls .pause() on elements it finds inside the home
+// sections container, assuming they're real upgraded scroller/itemscontainer custom elements.
+// Removing the itemsContainer/focuscontainer-x classnames wasn't sufficient to avoid this, so
+// stub a harmless no-op .pause()/.play() on our own nodes to prevent the crash regardless of
+// whatever selector Jellyfin's code actually uses to find them.
+function shimMediaInterface(el) {
+  if (!el) return;
+  if (typeof el.pause !== "function") el.pause = () => {};
+  if (typeof el.play !== "function") el.play = () => Promise.resolve();
+}
+
 function setupRowScroller(section, row) {
   if (!section) return;
 
   let activeRow = row || section.querySelector(".studio-hubs-row, .hub-row, .itemsContainer.hub-row");
   if (!activeRow) return;
 
-  activeRow.classList.add("studio-hubs-row", "itemsContainer", "focuscontainer-x");
+  // Don't reuse Jellyfin's own itemsContainer/focuscontainer-x classnames here: their home
+  // hero/backdrop script appears to treat elements with those classes as real upgraded
+  // custom elements (calling e.g. .pause() on them), which this plain div doesn't implement.
+  activeRow.classList.add("studio-hubs-row");
+  activeRow.classList.remove("itemsContainer", "focuscontainer-x");
+  shimMediaInterface(section);
+  shimMediaInterface(activeRow);
 
   let nativeScroller = section.querySelector(".studio-hubs-native-scroller");
   if (!nativeScroller) {
@@ -448,10 +449,13 @@ function setupRowScroller(section, row) {
     }
   }
 
+  shimMediaInterface(nativeScroller);
+
   if (activeRow.parentElement !== nativeScroller) {
     nativeScroller.appendChild(activeRow);
   }
 }
+
 
 async function fetchJsonViaApiClient(url) {
   const client = window.ApiClient;
@@ -1494,12 +1498,14 @@ function createCard(name, studioId, logoUrl, backdropUrl, videoUrl, studioIds = 
   a.dataset.hrefSource = studioId ? "studioId" : "search";
   a.dataset.studioPending = studioId ? "0" : "1";
   a.setAttribute("aria-label", name);
+  shimMediaInterface(a);
 
   if (backdropUrl || logoUrl) {
     const img = document.createElement("img");
     img.className = logoUrl ? "studio-hub-img studio-hub-logo" : "studio-hub-img";
     img.src = logoUrl || backdropUrl;
     img.alt = name;
+    shimMediaInterface(img);
     a.appendChild(img);
   }
 
@@ -1600,10 +1606,11 @@ async function resolvePendingCardLinks(row) {
   }
 }
 
-function ensureEmptyState(row, message) {
+function ensureEmptyState(row, message, isLoading = false) {
   if (!row) return;
   const state = document.createElement("div");
   state.className = "studio-hubs-empty";
+  if (isLoading) state.dataset.loading = "1";
   state.textContent = message || "No studios available to display.";
   row.appendChild(state);
 }
@@ -1613,7 +1620,7 @@ function ensureLoadingState(row) {
   const hasCards = !!row.querySelector(".studio-hub-card");
   const hasState = !!row.querySelector(".studio-hubs-empty");
   if (hasCards || hasState) return;
-  ensureEmptyState(row, "Loading studios...");
+  ensureEmptyState(row, "Loading studios...", true);
 }
 
 function isHomeVisible() {
@@ -1671,15 +1678,49 @@ function buildRenderSignature(entries, cfg) {
 
 async function renderStudioHubs(force = false) {
   tickHomeVisitState();
-  if (busy) return;
+  if (busy) {
+    console.debug("[StudioHubs] renderStudioHubs skipped: busy");
+    return;
+  }
   const now = Date.now();
-  if (!force && (now - lastRenderAt) < MIN_RENDER_INTERVAL_MS) return;
+  if (!force && (now - lastRenderAt) < MIN_RENDER_INTERVAL_MS) {
+    console.debug("[StudioHubs] renderStudioHubs skipped: throttled");
+    return;
+  }
   lastRenderAt = now;
 
   const root = getHomeContainer();
-  if (!root) return;
+  if (!root) {
+    // Don't gate this on isHomeVisible(): on a full page reload (e.g. browser back button),
+    // boot() can run before Jellyfin has mounted the home page DOM at all, so isHomeVisible()
+    // would be false even though home is about to mount. Rely on the retry cap instead so this
+    // can't loop forever while genuinely stuck on a non-home page.
+    if (renderRootRetryCount >= MAX_HOME_CONTAINER_RETRIES) {
+      renderRootRetryCount = 0;
+      return;
+    }
+    console.debug("[StudioHubs] renderStudioHubs: home container not found, scheduling retry", { force, attempt: renderRootRetryCount });
+    if (!force || (force && !renderRootRetryScheduled)) {
+      renderRootRetryScheduled = true;
+      renderRootRetryCount += 1;
+      setTimeout(() => {
+        renderRootRetryScheduled = false;
+        void renderStudioHubs(force);
+      }, HOME_CONTAINER_RETRY_MS);
+    }
+    return;
+  }
+  renderRootRetryCount = 0;
 
   busy = true;
+  // If a render gets interrupted mid-await (e.g. a fetch that never resolves because the view
+  // was torn down by navigation), the finally block below would never run, permanently blocking
+  // all future renders. This watchdog guarantees busy can't get stuck forever.
+  clearTimeout(busyWatchdogTimer);
+  busyWatchdogTimer = setTimeout(() => {
+    console.warn("[StudioHubs] render watchdog: forcing busy=false after a stuck render");
+    busy = false;
+  }, RENDER_WATCHDOG_MS);
   try {
     const section = ensureSection(root);
     const row = section.querySelector(".studio-hubs-row");
@@ -1791,8 +1832,12 @@ async function renderStudioHubs(force = false) {
     }
 
     const signature = buildRenderSignature(renderDebug, cfg);
-    const hasExistingRowContent = !!row.querySelector(".studio-hub-card, .studio-hubs-empty");
+    // Only treat this as "already rendered" if real cards exist. The loading placeholder and the
+    // "no cards" empty state both use the studio-hubs-empty class, so including them here caused
+    // the loading placeholder to be mistaken for a completed render, permanently skipping re-render.
+    const hasExistingRowContent = !!row.querySelector(".studio-hub-card");
     if (signature === lastRenderSignature && hasExistingRowContent) {
+      console.debug("[StudioHubs] renderStudioHubs skipped: signature unchanged and row already populated");
       DEBUG_STATE.lastRender = renderDebug;
       DEBUG_STATE.lastAt = Date.now();
       section.style.display = "";
@@ -1831,6 +1876,7 @@ async function renderStudioHubs(force = false) {
     DEBUG_STATE.lastAt = Date.now();
 
     if (!row.children.length) {
+      console.warn("[StudioHubs] renderStudioHubs produced zero cards", { mergedOrder, cardModels });
       ensureEmptyState(row, "No studio cards could be generated from current data.");
       setupRowScroller(section, row);
       setTimeout(scheduleRender, NO_CARDS_RETRY_DELAY_MS);
@@ -1846,6 +1892,7 @@ async function renderStudioHubs(force = false) {
       ensureEmptyState(row, "An error occurred while rendering studios.");
     }
   } finally {
+    clearTimeout(busyWatchdogTimer);
     busy = false;
   }
 }
@@ -1899,10 +1946,16 @@ function scheduleRenderDeferred(options = {}) {
 function installLifecycleHooks() {
   const onNav = () => {
     scheduleRenderDeferred({ force: true });
-    // Fallback: after a short delay, check if cards are missing and force another render if needed
+    // Fallback: after a short delay, check if cards are missing and force another render if needed.
+    // Only applies while actually on home — otherwise this fires (and loops) on every unrelated page.
     setTimeout(() => {
+      if (!isHomeVisible()) return;
       const row = document.querySelector(".studio-hubs-row");
-      if (row && !row.querySelector(".studio-hub-card") && !row.querySelector(".studio-hubs-empty")) {
+      // Retry if the row is missing entirely (container wasn't ready yet) or still has no content.
+      // A loading placeholder doesn't count as "done" — only real cards or a final (non-loading) empty state do.
+      const hasFinalContent = !!row?.querySelector(".studio-hub-card, .studio-hubs-empty:not([data-loading])");
+      if (!row || !hasFinalContent) {
+        console.warn("[StudioHubs] onNav fallback: row missing/empty after idle timeout, forcing retry", { rowFound: !!row });
         scheduleRenderDeferred({ force: true, delayMs: 300 });
       }
     }, MAIN_SCREEN_IDLE_TIMEOUT_MS);
@@ -1934,6 +1987,28 @@ function installLifecycleHooks() {
   });
 }
 
+function snapshotHomeDomForDiagnostics() {
+  try {
+    const homeRoot = getHomeContainer();
+    const section = document.getElementById("studio-hubs");
+    const row = section?.querySelector(".studio-hubs-row") || null;
+    return {
+      homeVisible: isHomeVisible(),
+      homeChildCount: homeRoot ? homeRoot.children.length : null,
+      sectionIndex: homeRoot && section ? Array.from(homeRoot.children).indexOf(section) : -1,
+      sectionClassList: section ? Array.from(section.classList) : null,
+      rowClassList: row ? Array.from(row.classList) : null,
+      cardCount: row ? row.querySelectorAll(".studio-hub-card").length : 0,
+    };
+  } catch (err) {
+    return { snapshotError: String(err) };
+  }
+}
+
+// Jellyfin's own home-screen hero/backdrop code logs its render errors via console.error/window
+// "error" rather than throwing something we can catch directly. This was used while diagnosing
+// the pause() crash; now that it's fixed structurally via shimMediaInterface, only the manual
+// domSnapshot() debug helper below remains, without patching any global console/window behavior.
 function boot() {
   if (window[BOOT_GUARD_KEY]) return;
   window[BOOT_GUARD_KEY] = true;
@@ -1941,6 +2016,9 @@ function boot() {
   window.__studioHubsDebug = {
     dump() {
       return JSON.parse(JSON.stringify(DEBUG_STATE.lastRender || []));
+    },
+    domSnapshot() {
+      return snapshotHomeDomForDiagnostics();
     },
     unresolved() {
       return (DEBUG_STATE.lastRender || []).filter((x) => !String(x?.resolvedStudioId || "").trim());
