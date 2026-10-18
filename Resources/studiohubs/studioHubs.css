@@ -34,6 +34,24 @@
   margin-bottom: 12px;
 }
 
+#studio-hubs .studio-hubs-scroll-controls {
+  inset-inline-end: 0;
+}
+
+#studio-hubs .studio-hubs-scroll-controls[hidden] {
+  display: none !important;
+}
+
+#studio-hubs.studio-hubs-has-scroll-controls .sectionTitleContainer {
+  padding-inline-end: calc(var(--studiohubs-inline-padding) + 104px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #studio-hubs .studio-hubs-native-scroller {
+    scroll-behavior: auto;
+  }
+}
+
 .studio-hub-card {
   position: relative;
   flex: 0 0 auto;

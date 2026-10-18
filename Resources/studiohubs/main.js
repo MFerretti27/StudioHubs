@@ -191,6 +191,7 @@ let homeVisitId = 0;
 let randomOrderCache = { visitId: 0, key: "", order: [] };
 const BOOT_GUARD_KEY = "__studioHubsBooted";
 let hoverVideoObserver = null;
+let rowScrollControls = null;
 
 function ensureCss() {
   if (document.getElementById("studiohubs-css")) return;
@@ -454,8 +455,90 @@ function setupRowScroller(section, row) {
   if (activeRow.parentElement !== nativeScroller) {
     nativeScroller.appendChild(activeRow);
   }
+  setupRowScrollControls(section, nativeScroller, activeRow);
 }
 
+function disposeRowScrollControls() {
+  if (!rowScrollControls) return;
+  rowScrollControls.resizeObserver?.disconnect();
+  rowScrollControls.contentObserver.disconnect();
+  rowScrollControls.scroller.removeEventListener("scroll", rowScrollControls.update);
+  window.removeEventListener("resize", rowScrollControls.update);
+  rowScrollControls.controls.remove();
+  rowScrollControls.section.classList.remove("studio-hubs-has-scroll-controls");
+  rowScrollControls = null;
+}
+
+function setupRowScrollControls(section, scroller, row) {
+  if (rowScrollControls?.scroller === scroller && rowScrollControls.row === row) {
+    rowScrollControls.update();
+    return;
+  }
+  disposeRowScrollControls();
+
+  // Reuse Jellyfin's button styling, not its custom elements: those require the
+  // upgraded scroller API that our plain overflow scroller intentionally avoids.
+  const controls = document.createElement("div");
+  controls.className = "emby-scrollbuttons padded-right studio-hubs-scroll-controls";
+  controls.hidden = true;
+  scroller.id = "studio-hubs-scroller";
+
+  const createButton = (label, icon) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "paper-icon-button-light emby-scrollbuttons-button";
+    button.title = label;
+    button.setAttribute("aria-label", label);
+    button.setAttribute("aria-controls", scroller.id);
+    button.setAttribute("data-ripple", "false");
+    const glyph = document.createElement("span");
+    glyph.className = `material-icons ${icon}`;
+    glyph.setAttribute("aria-hidden", "true");
+    button.appendChild(glyph);
+    controls.appendChild(button);
+    return button;
+  };
+
+  const previous = createButton("Previous", "chevron_left");
+  const next = createButton("Next", "chevron_right");
+  section.insertBefore(controls, scroller);
+
+  const isRTL = () => window.getComputedStyle(scroller).direction === "rtl";
+  const update = () => {
+    const maxScroll = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+    const position = Math.max(0, Math.min(maxScroll, scroller.scrollLeft * (isRTL() ? -1 : 1)));
+    const overflowing = scroller.clientWidth > 0 && maxScroll > 20 && !!row.querySelector(".studio-hub-card");
+    controls.hidden = !overflowing;
+    section.classList.toggle("studio-hubs-has-scroll-controls", overflowing);
+    previous.disabled = !overflowing || position <= 1;
+    next.disabled = !overflowing || position >= maxScroll - 1;
+  };
+
+  const scrollPage = (direction) => {
+    const card = row.querySelector(".studio-hub-card");
+    if (!card) return;
+    const cardStep = card.getBoundingClientRect().width + (parseFloat(window.getComputedStyle(row).columnGap) || 0);
+    const style = window.getComputedStyle(scroller);
+    const viewport = scroller.clientWidth - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0);
+    const distance = Math.max(1, Math.floor(viewport / cardStep)) * cardStep;
+    scroller.scrollBy({
+      left: direction * distance * (isRTL() ? -1 : 1),
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",
+    });
+  };
+
+  previous.addEventListener("click", () => scrollPage(-1));
+  next.addEventListener("click", () => scrollPage(1));
+  scroller.addEventListener("scroll", update, { passive: true });
+  window.addEventListener("resize", update, { passive: true });
+  const contentObserver = new MutationObserver(update);
+  contentObserver.observe(row, { childList: true });
+  const resizeObserver = typeof ResizeObserver === "function" ? new ResizeObserver(update) : null;
+  resizeObserver?.observe(scroller);
+  resizeObserver?.observe(row);
+  rowScrollControls = { section, scroller, row, controls, update, contentObserver, resizeObserver };
+  update();
+}
 
 async function fetchJsonViaApiClient(url) {
   const client = window.ApiClient;
@@ -1975,6 +2058,9 @@ function installLifecycleHooks() {
 
   // If Home DOM is rebuilt and our section gets dropped, add it back.
   const observer = new MutationObserver(() => {
+    if (rowScrollControls && !rowScrollControls.scroller.isConnected) {
+      disposeRowScrollControls();
+    }
     if (!isHomeVisible()) return;
     if (!document.getElementById("studio-hubs")) {
       onNav();
