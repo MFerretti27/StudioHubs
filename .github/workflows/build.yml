@@ -19,7 +19,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 9.0.x
+          dotnet-version: 10.0.x
       - name: Restore
         run: dotnet restore
       - name: Build (Release)
@@ -33,26 +33,26 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 9.0.x
+          dotnet-version: 10.0.x
       - name: Publish
         run: dotnet publish -c Release
       - name: Verify required publish files exist
         shell: bash
         run: |
           set -euo pipefail
-          test -f bin/Release/net9.0/publish/Jellyfin.Plugin.StudioHubs.dll
-          test -f bin/Release/net9.0/publish/Jellyfin.Plugin.StudioHubs.deps.json
-          test -f bin/Release/net9.0/publish/manifest.json
-          test -f bin/Release/net9.0/publish/meta.json
+          test -f bin/Release/net10.0/publish/Jellyfin.Plugin.StudioHubs.dll
+          test -f bin/Release/net10.0/publish/Jellyfin.Plugin.StudioHubs.deps.json
+          test -f bin/Release/net10.0/publish/manifest.json
+          test -f bin/Release/net10.0/publish/meta.json
       - name: Create package zip (smoke)
         shell: bash
         run: |
           set -euo pipefail
           zip -j StudioHubs-PR-smoke.zip \
-            bin/Release/net9.0/publish/Jellyfin.Plugin.StudioHubs.dll \
-            bin/Release/net9.0/publish/Jellyfin.Plugin.StudioHubs.deps.json \
-            bin/Release/net9.0/publish/manifest.json \
-            bin/Release/net9.0/publish/meta.json
+            bin/Release/net10.0/publish/Jellyfin.Plugin.StudioHubs.dll \
+            bin/Release/net10.0/publish/Jellyfin.Plugin.StudioHubs.deps.json \
+            bin/Release/net10.0/publish/manifest.json \
+            bin/Release/net10.0/publish/meta.json
       - name: Verify zip contents
         run: unzip -l StudioHubs-PR-smoke.zip
 
@@ -87,7 +87,7 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: '9.0.x'
+        dotnet-version: '10.0.x'
 
     - name: Restore dependencies
       run: dotnet restore

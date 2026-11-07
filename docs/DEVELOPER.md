@@ -31,7 +31,7 @@ dotnet publish -c Release
 
 Main output folder:
 
-- bin/Release/net9.0/publish
+- bin/Release/net10.0/publish
 
 Lean package includes:
 
