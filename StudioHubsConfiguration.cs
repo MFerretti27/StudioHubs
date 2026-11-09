@@ -21,6 +21,9 @@ public class StudioHubsConfiguration : BasePluginConfiguration
     [JsonPropertyName("studioHubsRandomOrder")]
     public bool StudioHubsRandomOrder { get; set; } = false;
 
+    [JsonPropertyName("studioHubsHideHomeSectionTitle")]
+    public bool StudioHubsHideHomeSectionTitle { get; set; } = false;
+
     [JsonPropertyName("studioHubsInitialHoverPreloadCount")]
     public int StudioHubsInitialHoverPreloadCount { get; set; } = 5;
 
