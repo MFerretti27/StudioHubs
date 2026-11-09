@@ -20,6 +20,11 @@
           <span>Randomize studio order on each Home visit</span>
         </label>
 
+        <label class="studiohubs-checkline">
+          <input id="studioHubsHideHomeSectionTitle" type="checkbox" />
+          <span>Hide the Home section title (show cards only)</span>
+        </label>
+
         <div class="inputContainer">
           <label class="inputLabel" for="studioHubsInitialHoverPreloadCount">Initial hover preload count</label>
           <input id="studioHubsInitialHoverPreloadCount" type="number" class="emby-input" min="0" max="24" step="1" />
@@ -239,11 +244,13 @@
       function applyConfig(cfg) {
         const hoverVideo = getCfgValue(cfg, "studioHubsHoverVideo", "StudioHubsHoverVideo", true);
         const randomOrder = getCfgValue(cfg, "studioHubsRandomOrder", "StudioHubsRandomOrder", false);
+        const hideHomeSectionTitle = getCfgValue(cfg, "studioHubsHideHomeSectionTitle", "StudioHubsHideHomeSectionTitle", false);
         const initialHoverPreloadCount = getCfgValue(cfg, "studioHubsInitialHoverPreloadCount", "StudioHubsInitialHoverPreloadCount", 5);
         const placeBefore = getCfgValue(cfg, "studioHubsPlaceBefore", "StudioHubsPlaceBefore", "my media");
 
         input("studioHubsHoverVideo").checked = hoverVideo !== false;
         input("studioHubsRandomOrder").checked = randomOrder === true;
+        input("studioHubsHideHomeSectionTitle").checked = hideHomeSectionTitle === true;
         input("studioHubsInitialHoverPreloadCount").value = String(Number.isFinite(Number(initialHoverPreloadCount)) ? Math.max(0, Math.min(24, Number(initialHoverPreloadCount))) : 5);
         input("studioHubsPlaceBefore").value = String(placeBefore || "my media");
       }
@@ -290,6 +297,7 @@
         const body = {
           studioHubsHoverVideo: input("studioHubsHoverVideo").checked,
           studioHubsRandomOrder: input("studioHubsRandomOrder").checked,
+          studioHubsHideHomeSectionTitle: input("studioHubsHideHomeSectionTitle").checked,
           studioHubsInitialHoverPreloadCount: preloadCount,
           studioHubsPlaceBefore: String(input("studioHubsPlaceBefore").value || "").trim()
         };

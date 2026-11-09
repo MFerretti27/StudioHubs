@@ -206,6 +206,7 @@ function getCfgFromLocalStorage() {
   const enabled = localStorage.getItem("studiohubs.enabled");
   const hoverVideo = localStorage.getItem("studiohubs.hoverVideo");
   const randomOrder = localStorage.getItem("studiohubs.randomOrder");
+  const hideHomeSectionTitle = localStorage.getItem("studiohubs.hideHomeSectionTitle");
   const initialHoverPreloadCount = localStorage.getItem("studiohubs.initialHoverPreloadCount");
   const placeBefore = String(localStorage.getItem("studiohubs.placeBefore") || "").trim();
 
@@ -217,6 +218,7 @@ function getCfgFromLocalStorage() {
     enabled: enabled == null ? true : enabled !== "false",
     hoverVideo: hoverVideo == null ? true : hoverVideo !== "false",
     randomOrder: randomOrder === "true",
+    hideHomeSectionTitle: hideHomeSectionTitle === "true",
     initialHoverPreloadCount: Number.isFinite(parsedInitialHoverPreloadCount)
       ? Math.max(0, Math.min(STUDIO_MAX_INITIAL_HOVER_PRELOAD_COUNT, parsedInitialHoverPreloadCount))
       : STUDIO_INITIAL_HOVER_PRELOAD_COUNT,
@@ -251,6 +253,7 @@ async function getCfg() {
       enabled: readCfg("enableStudioHubs", "EnableStudioHubs", true) !== false,
       hoverVideo: readCfg("studioHubsHoverVideo", "StudioHubsHoverVideo", fallback.hoverVideo) !== false,
       randomOrder: readCfg("studioHubsRandomOrder", "StudioHubsRandomOrder", fallback.randomOrder) === true,
+      hideHomeSectionTitle: readCfg("studioHubsHideHomeSectionTitle", "StudioHubsHideHomeSectionTitle", fallback.hideHomeSectionTitle) === true,
       initialHoverPreloadCount: Math.max(0, Math.min(
         STUDIO_MAX_INITIAL_HOVER_PRELOAD_COUNT,
         Number.parseInt(String(readCfg("studioHubsInitialHoverPreloadCount", "StudioHubsInitialHoverPreloadCount", fallback.initialHoverPreloadCount)), 10) || 0
@@ -408,6 +411,14 @@ function ensureSection(root) {
 
   placeSection(root, section);
   return section;
+}
+
+function setHomeSectionTitleHidden(section, hidden) {
+  const titleContainer = section?.querySelector(".sectionTitleContainer");
+  if (!titleContainer) return;
+  const shouldHide = hidden === true;
+  titleContainer.hidden = shouldHide;
+  titleContainer.style.display = shouldHide ? "none" : "";
 }
 
 // Jellyfin's home hero/backdrop code calls .pause() on elements it finds inside the home
@@ -1824,6 +1835,7 @@ async function renderStudioHubs(force = false) {
     }
 
     section.style.display = "";
+    setHomeSectionTitleHidden(section, cfg.hideHomeSectionTitle);
     const renderDebug = [];
 
     let userId;

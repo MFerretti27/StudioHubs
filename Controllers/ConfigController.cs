@@ -15,6 +15,7 @@ public sealed class StudioHubsConfigUpdateDto
     public int? StudioHubsCardCount { get; set; }
     public bool? StudioHubsHoverVideo { get; set; }
     public bool? StudioHubsRandomOrder { get; set; }
+    public bool? StudioHubsHideHomeSectionTitle { get; set; }
     public int? StudioHubsInitialHoverPreloadCount { get; set; }
     public string? StudioHubsPlaceAfter { get; set; }
     public string? StudioHubsPlaceBefore { get; set; }
@@ -50,6 +51,7 @@ public sealed class ConfigController : ControllerBase
                 cfg.StudioHubsCardCount,
                 cfg.StudioHubsHoverVideo,
                 cfg.StudioHubsRandomOrder,
+                cfg.StudioHubsHideHomeSectionTitle,
                 cfg.StudioHubsInitialHoverPreloadCount,
                 cfg.StudioHubsPlaceAfter,
                 cfg.StudioHubsPlaceBefore
@@ -99,6 +101,11 @@ public sealed class ConfigController : ControllerBase
             cfg.StudioHubsRandomOrder = randomOrder;
         }
 
+        if (incoming?.StudioHubsHideHomeSectionTitle is bool hideHomeSectionTitle)
+        {
+            cfg.StudioHubsHideHomeSectionTitle = hideHomeSectionTitle;
+        }
+
         if (incoming?.StudioHubsInitialHoverPreloadCount is int preloadCount)
         {
             cfg.StudioHubsInitialHoverPreloadCount = Math.Clamp(preloadCount, 0, 24);
@@ -127,6 +134,7 @@ public sealed class ConfigController : ControllerBase
                 cfg.StudioHubsCardCount,
                 cfg.StudioHubsHoverVideo,
                 cfg.StudioHubsRandomOrder,
+                cfg.StudioHubsHideHomeSectionTitle,
                 cfg.StudioHubsInitialHoverPreloadCount,
                 cfg.StudioHubsPlaceAfter,
                 cfg.StudioHubsPlaceBefore
