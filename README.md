@@ -24,8 +24,7 @@ https://github.com/user-attachments/assets/2c126286-2a56-4e2f-aa46-17cf4cd3f631
 
 This plugin was extracted from the Studio Hubs functionality in [G-grbz/Jellyfin-MonWUI-Plugin](https://github.com/G-grbz/Jellyfin-MonWUI-Plugin) and focuses/improves only on Studio Hubs behavior.
 
-- Target framework: net9.0
-- Supports and tested on Jellyfin 10.11 and Jellyfin 12.1
+- Targets .NET 10 and Jellyfin 12.4 (plugin ABI 12.4.0.0).
 
 ## Highlights
 

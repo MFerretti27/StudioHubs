@@ -29,7 +29,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: 9.0.x
+          dotnet-version: 10.0.x
 
       - name: Compute next release tag
         id: version
@@ -101,7 +101,7 @@ jobs:
             release_timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
           fi
 
-          manifest_target_abi="$(jq -r '.[0].versions[0].targetAbi // "10.11.0.0"' manifest.json)"
+          manifest_target_abi="12.4.0.0"
           manifest_changelog="Improvements and bug fixes. More info: [StudioHubs](https://github.com/MFerretti27/StudioHubs)"
 
           jq \
@@ -115,7 +115,7 @@ jobs:
             manifest.json > manifest.json.tmp
           mv manifest.json.tmp manifest.json
 
-          meta_target_abi="$(jq -r '.versions[0].targetAbi // "10.11.0.0"' meta.json)"
+          meta_target_abi="12.4.0.0"
 
           jq \
             --arg version "$PLUGIN_VERSION" \
@@ -149,11 +149,11 @@ jobs:
 
           zip_name="${TAG_NAME}.zip"
           zip -j "$zip_name" \
-            bin/Release/net9.0/publish/Jellyfin.Plugin.StudioHubs.dll \
-            bin/Release/net9.0/publish/Jellyfin.Plugin.StudioHubs.deps.json \
-            bin/Release/net9.0/publish/manifest.json \
-            bin/Release/net9.0/publish/meta.json \
-            bin/Release/net9.0/publish/StudioHubs.png
+            bin/Release/net10.0/publish/Jellyfin.Plugin.StudioHubs.dll \
+            bin/Release/net10.0/publish/Jellyfin.Plugin.StudioHubs.deps.json \
+            bin/Release/net10.0/publish/manifest.json \
+            bin/Release/net10.0/publish/meta.json \
+            bin/Release/net10.0/publish/StudioHubs.png
 
           echo "zip_name=${zip_name}" >> "$GITHUB_OUTPUT"
 
@@ -183,7 +183,7 @@ jobs:
             release_timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
           fi
 
-          manifest_target_abi="$(jq -r '.[0].versions[0].targetAbi // "10.11.0.0"' manifest.json)"
+          manifest_target_abi="12.4.0.0"
           manifest_changelog="Improvements and bug fixes. More info: [StudioHubs](https://github.com/MFerretti27/StudioHubs)"
 
           jq \
@@ -197,7 +197,7 @@ jobs:
             manifest.json > manifest.json.tmp
           mv manifest.json.tmp manifest.json
 
-          meta_target_abi="$(jq -r '.versions[0].targetAbi // "10.11.0.0"' meta.json)"
+          meta_target_abi="12.4.0.0"
 
           jq \
             --arg version "$PLUGIN_VERSION" \
