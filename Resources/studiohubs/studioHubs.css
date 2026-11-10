@@ -27,6 +27,15 @@
   flex-wrap: nowrap;
   align-items: stretch;
   gap: 12px;
+  /* Match Jellyfin's .cardBox-bottom padded spacing, not the smaller
+     default .cardBox margin: these logo-only cards have no text footer. */
+  margin-bottom: 1.8em;
+}
+
+@media (max-width: 50em) {
+  #studio-hubs .studio-hubs-row {
+    margin-bottom: 1.2em;
+  }
 }
 
 #studio-hubs .sectionTitleContainer {

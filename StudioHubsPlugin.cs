@@ -42,8 +42,11 @@ public class StudioHubsPlugin : BasePlugin<StudioHubsConfiguration>, IHasWebPage
             new PluginPageInfo
             {
                 Name = "StudioHubsConfigPage",
+                DisplayName = "Studio Hubs",
                 EmbeddedResourcePath = $"{ns}.Web.configuration.html",
-                EnableInMainMenu = false
+                EnableInMainMenu = true,
+                MenuSection = "plugins",
+                MenuIcon = "camera_roll"
             }
         };
     }

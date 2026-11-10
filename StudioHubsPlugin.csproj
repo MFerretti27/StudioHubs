@@ -30,6 +30,11 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Local reference-plugin copies must not be compiled into Studio Hubs. -->
+    <Compile Remove="DailySpotlight*/**/*.cs" />
+  </ItemGroup>
+
   <PropertyGroup>
     <GenerateEmbeddedFilesManifest>true</GenerateEmbeddedFilesManifest>
   </PropertyGroup>

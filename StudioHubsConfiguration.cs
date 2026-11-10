@@ -30,6 +30,9 @@ public class StudioHubsConfiguration : BasePluginConfiguration
     [JsonPropertyName("studioHubsPlaceAfter")]
     public string StudioHubsPlaceAfter { get; set; } = "continue watching";
 
+    [JsonPropertyName("studioHubsHomePosition")]
+    public string StudioHubsHomePosition { get; set; } = "after-my-media";
+
     [JsonPropertyName("studioHubsPlaceBefore")]
     public string StudioHubsPlaceBefore { get; set; } = "recently added,latest,recent";
 

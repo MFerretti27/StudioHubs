@@ -5,22 +5,33 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT_FILE="$ROOT_DIR/StudioHubsPlugin.csproj"
 CONFIGURATION="Release"
 OUTPUT_DIR="$ROOT_DIR/dist/local"
+VERSION_OVERRIDE=""
 
 usage() {
   cat <<'EOF'
 Build and package Studio Hubs locally without creating a release.
 
-Usage: scripts/build-local.sh [--configuration NAME] [--output-dir PATH]
+Usage: scripts/build-local.sh [--configuration NAME] [--output-dir PATH] [--version X.Y.Z.W]
 
 Options:
   --configuration NAME  Build configuration (default: Release)
   --output-dir PATH     Output directory (default: dist/local)
+  --version X.Y.Z.W     Override the local build version without editing the project
   -h, --help            Show this help
 EOF
 }
 
 while (($# > 0)); do
   case "$1" in
+    --version)
+      (($# >= 2)) || { echo "Missing value for --version" >&2; exit 2; }
+      VERSION_OVERRIDE="$2"
+      [[ "$VERSION_OVERRIDE" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+        echo "Version must use X.Y.Z.W format." >&2
+        exit 2
+      }
+      shift 2
+      ;;
     --configuration)
       (($# >= 2)) || { echo "Missing value for --configuration" >&2; exit 2; }
       CONFIGURATION="$2"
@@ -52,13 +63,14 @@ for command in dotnet zip unzip; do
 done
 
 VERSION="$(dotnet msbuild "$PROJECT_FILE" -getProperty:Version)"
+VERSION="${VERSION_OVERRIDE:-$VERSION}"
 TARGET_FRAMEWORK="$(dotnet msbuild "$PROJECT_FILE" -getProperty:TargetFramework)"
 PUBLISH_DIR="$ROOT_DIR/bin/$CONFIGURATION/$TARGET_FRAMEWORK/publish"
 PACKAGE_DIR="$OUTPUT_DIR/StudioHubs-v$VERSION"
 ZIP_FILE="$OUTPUT_DIR/StudioHubs-v$VERSION.zip"
 
 echo "Publishing Studio Hubs $VERSION ($TARGET_FRAMEWORK, $CONFIGURATION)..."
-dotnet publish "$PROJECT_FILE" --configuration "$CONFIGURATION"
+dotnet publish "$PROJECT_FILE" --configuration "$CONFIGURATION" -p:Version="$VERSION"
 
 PACKAGE_FILES=(
   "Jellyfin.Plugin.StudioHubs.dll"

@@ -208,7 +208,7 @@ function getCfgFromLocalStorage() {
   const randomOrder = localStorage.getItem("studiohubs.randomOrder");
   const hideHomeSectionTitle = localStorage.getItem("studiohubs.hideHomeSectionTitle");
   const initialHoverPreloadCount = localStorage.getItem("studiohubs.initialHoverPreloadCount");
-  const placeBefore = String(localStorage.getItem("studiohubs.placeBefore") || "").trim();
+  const homePosition = String(localStorage.getItem("studiohubs.homePosition") || "after-my-media").trim();
 
   const parsedInitialHoverPreloadCount = Number.parseInt(String(initialHoverPreloadCount || STUDIO_INITIAL_HOVER_PRELOAD_COUNT), 10);
 
@@ -222,7 +222,7 @@ function getCfgFromLocalStorage() {
     initialHoverPreloadCount: Number.isFinite(parsedInitialHoverPreloadCount)
       ? Math.max(0, Math.min(STUDIO_MAX_INITIAL_HOVER_PRELOAD_COUNT, parsedInitialHoverPreloadCount))
       : STUDIO_INITIAL_HOVER_PRELOAD_COUNT,
-    placeBefore,
+    homePosition,
   };
 }
 
@@ -258,7 +258,7 @@ async function getCfg() {
         STUDIO_MAX_INITIAL_HOVER_PRELOAD_COUNT,
         Number.parseInt(String(readCfg("studioHubsInitialHoverPreloadCount", "StudioHubsInitialHoverPreloadCount", fallback.initialHoverPreloadCount)), 10) || 0
       )),
-      placeBefore: String(readCfg("studioHubsPlaceBefore", "StudioHubsPlaceBefore", fallback.placeBefore || "")).trim(),
+      homePosition: String(readCfg("studioHubsHomePosition", "StudioHubsHomePosition", "after-my-media") || "after-my-media").trim(),
       studioHubsStudioOrder: Array.isArray(readCfg("studioHubsStudioOrder", "StudioHubsStudioOrder", [])) ? readCfg("studioHubsStudioOrder", "StudioHubsStudioOrder", []) : [],
       studioHubsEnabledStudios: Array.isArray(readCfg("studioHubsEnabledStudios", "StudioHubsEnabledStudios", [])) ? readCfg("studioHubsEnabledStudios", "StudioHubsEnabledStudios", []) : [],
     };
@@ -320,7 +320,6 @@ function getHomeContainer() {
 function normalizeSectionText(value) {
   return String(value || "")
     .toLowerCase()
-    .replace(/[^a-z0-9+ ]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -334,20 +333,47 @@ function getSectionTitleText(sectionEl) {
   return normalizeSectionText(titleEl?.textContent || "");
 }
 
-function getPlacementConfig() {
-  const defaultBefore = "my media";
-  const configuredBefore = String(CACHE.config?.placeBefore || "").trim();
-  const rawBefore = configuredBefore || localStorage.getItem("studiohubs.placeBefore") || defaultBefore;
+const HOME_POSITION_TITLES = {
+  "after-my-media": { keys: ["HeaderMyMedia", "HeaderMyMediaSmall"], fallbacks: ["My Media"] },
+  "after-continue-watching": { keys: ["HeaderContinueWatching"], fallbacks: ["Continue Watching"] },
+  "after-latest-media": {
+    keys: ["HeaderLatestMovies", "HeaderLatestEpisodes", "HeaderLatestMedia", "HeaderLatest"],
+    prefixKeys: ["LatestFromLibrary"],
+    fallbacks: ["Latest Movies", "Latest TV Shows", "Latest Episodes", "Latest Media"],
+    prefixFallbacks: ["Latest from"]
+  },
+  "after-next-up": { keys: ["NextUp", "HeaderNextUp"], fallbacks: ["Next Up"] },
+  "after-continue-listening": { keys: ["HeaderContinueListening"], fallbacks: ["Continue Listening"] },
+  "after-continue-reading": { keys: ["HeaderContinueReading"], fallbacks: ["Continue Reading"] },
+  "after-live-tv": { keys: ["LiveTV", "HeaderLiveTV"], fallbacks: ["Live TV"] },
+  "after-active-recordings": { keys: ["HeaderActiveRecordings"], fallbacks: ["Active Recordings"] }
+};
 
-  return {
-    beforeKeyword: normalizeSectionText(rawBefore),
+function findPositionTarget(sections, position) {
+  const configured = HOME_POSITION_TITLES[position];
+  if (!configured) return null;
+  if (position === "after-my-media") {
+    const librarySection = sections.find(candidate => candidate.querySelector(".homeLibraryButtonContainer"));
+    if (librarySection) return librarySection;
+  }
+  const translate = (key, prefix = false) => {
+    try {
+      const value = prefix ? window.Globalize?.translate?.(key, "") : window.Globalize?.translate?.(key);
+      return value && value !== key ? value : "";
+    } catch {
+      return "";
+    }
   };
-}
-
-function sectionTitleMatchesKeyword(sectionEl, keyword) {
-  if (!keyword) return false;
-  const title = getSectionTitleText(sectionEl);
-  return !!title && title.includes(keyword);
+  const titles = new Set([
+    ...configured.keys.map(key => translate(key)), ...configured.fallbacks
+  ].filter(Boolean).map(normalizeSectionText));
+  const prefixes = [
+    ...(configured.prefixKeys || []).map(key => translate(key, true)), ...(configured.prefixFallbacks || [])
+  ].filter(Boolean).map(normalizeSectionText);
+  return sections.find(candidate => {
+    const title = getSectionTitleText(candidate);
+    return title && (titles.has(title) || prefixes.some(prefix => title.startsWith(prefix)));
+  }) || null;
 }
 
 // Inserting into the home container can synchronously upgrade sibling custom elements,
@@ -366,25 +392,14 @@ function placeSection(root, section) {
   if (!root || !section) return;
 
   const children = Array.from(root.children).filter((el) => el !== section);
-  const { beforeKeyword } = getPlacementConfig();
-  const beforeTarget = children.find((el) => sectionTitleMatchesKeyword(el, beforeKeyword)) || null;
-
-  if (beforeTarget && beforeTarget.parentElement === root && beforeTarget !== section) {
-    safeInsert(root, section, beforeTarget);
-    return;
-  }
-
-  const firstChild = root.firstElementChild;
-  if (!firstChild) {
-    if (section.parentElement !== root) {
-      safeInsert(root, section, null);
-    }
-    return;
-  }
-
-  if (firstChild !== section) {
-    safeInsert(root, section, firstChild);
-  }
+  const position = CACHE.config?.homePosition || "after-my-media";
+  const target = position === "top" ? null :
+    findPositionTarget(children, position) || findPositionTarget(children, "after-my-media") ||
+    children.find(candidate => candidate.classList.contains("section0"));
+  const reference = target ? target.nextElementSibling : children[0] || null;
+  // Avoid redundant DOM moves during polling and preserve focus/scroll position.
+  if (reference === section || (section.parentElement === root && section.nextElementSibling === reference)) return;
+  safeInsert(root, section, reference);
 }
 
 function ensureSection(root) {
@@ -1838,6 +1853,7 @@ async function renderStudioHubs(force = false) {
     }
 
     section.style.display = "";
+    placeSection(root, section);
     setHomeSectionTitleHidden(section, cfg.hideHomeSectionTitle);
     const renderDebug = [];
 

@@ -32,7 +32,10 @@ internal static class AssetVersioning
                 return DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
             }
 
-            return $"{v.Major}.{v.Minor}.{Math.Max(v.Build, 0)}.{Math.Max(v.Revision, 0)}";
+            // Different local builds can share an assembly version. Include the module
+            // identity so browsers don't reuse scripts from an older compiled build.
+            var buildId = typeof(StudioHubsPlugin).Assembly.ManifestModule.ModuleVersionId.ToString("N");
+            return $"{v.Major}.{v.Minor}.{Math.Max(v.Build, 0)}.{Math.Max(v.Revision, 0)}-{buildId}";
         }
         catch
         {
