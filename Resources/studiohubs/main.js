@@ -416,9 +416,12 @@ function ensureSection(root) {
 function setHomeSectionTitleHidden(section, hidden) {
   const titleContainer = section?.querySelector(".sectionTitleContainer");
   if (!titleContainer) return;
-  const shouldHide = hidden === true;
-  titleContainer.hidden = shouldHide;
-  titleContainer.style.display = shouldHide ? "none" : "";
+  // Keep the heading row's dimensions so the scroll arrows stay above the cards.
+  // Clear the old container-level hiding when reusing an existing section.
+  titleContainer.hidden = false;
+  titleContainer.style.display = "";
+  const title = titleContainer.querySelector(".sectionTitle");
+  if (title) title.style.visibility = hidden === true ? "hidden" : "";
 }
 
 // Jellyfin's home hero/backdrop code calls .pause() on elements it finds inside the home
