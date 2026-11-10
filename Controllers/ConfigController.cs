@@ -17,6 +17,7 @@ public sealed class StudioHubsConfigUpdateDto
     public bool? StudioHubsRandomOrder { get; set; }
     public bool? StudioHubsHideHomeSectionTitle { get; set; }
     public int? StudioHubsInitialHoverPreloadCount { get; set; }
+    public string? StudioHubsHomePosition { get; set; }
     public string? StudioHubsPlaceAfter { get; set; }
     public string? StudioHubsPlaceBefore { get; set; }
 }
@@ -53,6 +54,7 @@ public sealed class ConfigController : ControllerBase
                 cfg.StudioHubsRandomOrder,
                 cfg.StudioHubsHideHomeSectionTitle,
                 cfg.StudioHubsInitialHoverPreloadCount,
+                cfg.StudioHubsHomePosition,
                 cfg.StudioHubsPlaceAfter,
                 cfg.StudioHubsPlaceBefore
             }
@@ -75,6 +77,19 @@ public sealed class ConfigController : ControllerBase
 
         var plugin = StudioHubsPlugin.Instance ?? throw new InvalidOperationException("Plugin not available.");
         var cfg = plugin.Configuration;
+
+        if (incoming?.StudioHubsHomePosition is not null)
+        {
+            var position = incoming.StudioHubsHomePosition.Trim().ToLowerInvariant();
+            if (position is not ("top" or "after-my-media" or "after-continue-watching" or
+                "after-latest-media" or "after-next-up" or "after-continue-listening" or
+                "after-continue-reading" or "after-live-tv" or "after-active-recordings"))
+            {
+                return BadRequest(new { ok = false, error = "Invalid Home row position." });
+            }
+
+            cfg.StudioHubsHomePosition = position;
+        }
 
         if (incoming?.EnablePlugin is bool enablePlugin)
         {
@@ -136,6 +151,7 @@ public sealed class ConfigController : ControllerBase
                 cfg.StudioHubsRandomOrder,
                 cfg.StudioHubsHideHomeSectionTitle,
                 cfg.StudioHubsInitialHoverPreloadCount,
+                cfg.StudioHubsHomePosition,
                 cfg.StudioHubsPlaceAfter,
                 cfg.StudioHubsPlaceBefore
             }

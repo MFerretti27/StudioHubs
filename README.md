@@ -52,13 +52,13 @@ Steps:
 
 ## Settings
 
-Open Admin Dashboard, then Plugins, then Studio Hubs.
+Open Admin Dashboard and select **Studio Hubs** under **Plugins** in the sidebar for quick access to settings.
 
 Available settings:
 
 - Enable hover video
 - Randomize studio order on each Home visit
-- Place before section (title or fragment of the Home section Studio Hubs should appear before)
+- Home row position for all users (dropdown)
 
 Studio Management (global, admin-only):
 
@@ -68,12 +68,16 @@ Studio Management (global, admin-only):
 
 ### Placement behavior
 
-Placement resolution order:
+Choose **At top of Home**, or place Studio Hubs after **My Media**, **Continue Watching**,
+**Latest Media**, **Next Up**, **Continue Listening**, **Continue Reading**, **Live TV**, or
+**Active Recordings**. Section matching uses Jellyfin's translated titles when available.
 
-1. Place before the first section whose title matches the configured keyword
-2. Else fallback to the top of Home sections
+Default placement: after **My Media**. If the selected section is missing from a user's Home,
+placement falls back to My Media, then the first native section, then the top if no sections exist.
 
-Default placement: before "My Media".
+This replaces the old free-text placement setting. Existing installations default to **After My Media**;
+select a new position in settings to override it. Legacy placement fields are retained in saved configuration
+for compatibility but no longer control the row.
 
 ## Linking a Movie or Show to a Studio
 

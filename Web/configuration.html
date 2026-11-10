@@ -1,6 +1,7 @@
 <div id="StudioHubsConfigPage"
      data-role="page"
      class="page type-interior pluginConfigurationPage"
+    data-require="emby-select"
      translate="no"
      data-jf-no-translate="1">
 
@@ -31,10 +32,20 @@
           <div class="fieldDescription">How many Home cards should start preloading hover videos immediately after the row renders. A higher number makes first-hover playback more likely to feel instant, but uses more bandwidth up front.</div>
         </div>
 
-        <div class="inputContainer">
-          <label class="inputLabel" for="studioHubsPlaceBefore">Place before section</label>
-          <input id="studioHubsPlaceBefore" type="text" class="emby-input" placeholder="my media" />
-          <div class="fieldDescription">The title (or a fragment of it) of the Home section Studio Hubs should appear right before, e.g. "my media", "recently added", "latest movies", "next up".</div>
+        <div class="selectContainer">
+          <label class="selectLabel" for="studioHubsHomePosition">Home row position for all users</label>
+          <select is="emby-select" id="studioHubsHomePosition" class="emby-select">
+            <option value="top">At top of Home</option>
+            <option value="after-my-media">After My Media</option>
+            <option value="after-continue-watching">After Continue Watching</option>
+            <option value="after-latest-media">After Latest Media</option>
+            <option value="after-next-up">After Next Up</option>
+            <option value="after-continue-listening">After Continue Listening</option>
+            <option value="after-continue-reading">After Continue Reading</option>
+            <option value="after-live-tv">After Live TV</option>
+            <option value="after-active-recordings">After Active Recordings</option>
+          </select>
+          <div class="fieldDescription">Applies to everyone. If a user's Home does not show the selected section, Studio Hubs appears after My Media instead.</div>
         </div>
 
         <div class="buttonContainer">
@@ -246,13 +257,15 @@
         const randomOrder = getCfgValue(cfg, "studioHubsRandomOrder", "StudioHubsRandomOrder", false);
         const hideHomeSectionTitle = getCfgValue(cfg, "studioHubsHideHomeSectionTitle", "StudioHubsHideHomeSectionTitle", false);
         const initialHoverPreloadCount = getCfgValue(cfg, "studioHubsInitialHoverPreloadCount", "StudioHubsInitialHoverPreloadCount", 5);
-        const placeBefore = getCfgValue(cfg, "studioHubsPlaceBefore", "StudioHubsPlaceBefore", "my media");
+        const homePosition = getCfgValue(cfg, "studioHubsHomePosition", "StudioHubsHomePosition", "after-my-media");
 
         input("studioHubsHoverVideo").checked = hoverVideo !== false;
         input("studioHubsRandomOrder").checked = randomOrder === true;
         input("studioHubsHideHomeSectionTitle").checked = hideHomeSectionTitle === true;
         input("studioHubsInitialHoverPreloadCount").value = String(Number.isFinite(Number(initialHoverPreloadCount)) ? Math.max(0, Math.min(24, Number(initialHoverPreloadCount))) : 5);
-        input("studioHubsPlaceBefore").value = String(placeBefore || "my media");
+        const positionInput = input("studioHubsHomePosition");
+        positionInput.value = String(homePosition || "after-my-media");
+        if (!positionInput.value) positionInput.value = "after-my-media";
       }
 
       async function loadConfig() {
@@ -299,7 +312,7 @@
           studioHubsRandomOrder: input("studioHubsRandomOrder").checked,
           studioHubsHideHomeSectionTitle: input("studioHubsHideHomeSectionTitle").checked,
           studioHubsInitialHoverPreloadCount: preloadCount,
-          studioHubsPlaceBefore: String(input("studioHubsPlaceBefore").value || "").trim()
+          studioHubsHomePosition: input("studioHubsHomePosition").value
         };
 
         try {
