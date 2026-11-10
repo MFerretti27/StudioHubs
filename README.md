@@ -9,6 +9,7 @@
 <p align="center">
   <img src="https://github.com/MFerretti27/StudioHubs/actions/workflows/build.yml/badge.svg?branch=main" alt="Build"/>
   <img src="https://img.shields.io/github/downloads/MFerretti27/StudioHubs/total?label=Total%20Downloads&logo=github" alt="GitHub Releases"/>
+  <a href="https://buymeacoffee.com/mferretti27"><img src="https://img.shields.io/badge/Buy%20Me%20A%20Coffee-support-yellow?logo=buy-me-a-coffee&logoColor=black" alt="Buy me a coffee"/></a>
 </p>
 
 Jellyfin plugin that adds a Studio Hubs row to the Home screen.
@@ -125,4 +126,3 @@ This project is licensed under the MIT License – see the [LICENSE](LICENSE) fi
 - **Issues:** [GitHub Issues](../../issues)
 - **Other Amazing Plugins:** [Awesome Jellyfin Repo](https://github.com/awesome-jellyfin/awesome-jellyfin/blob/main/README.md)
 - **Jellyfin Community:** [Official Jellyfin Forums](https://forum.jellyfin.org/)
-
